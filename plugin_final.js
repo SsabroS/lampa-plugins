@@ -17,6 +17,7 @@
     lampac_sisiname: {
       ru: 'Клубничка',
       en: 'Strawberry',
+      uk: 'Полуничка',
       zh: '草莓'
     }
   });
@@ -318,41 +319,11 @@
 
     Lampa.Component.add('sisi_' + Defined.use_api, Sisi);
     Lampa.Component.add('sisi_view_' + Defined.use_api, View); 
-
+    
     try { Lampa.Search.addSource(Search); } catch(e) {}
 
     function add() {
-      // Скрытый контейнер для наших изъятых кнопок
-      if (!$('#bwa-vault').length) {
-          $('body').append('<div id="bwa-vault" style="display:none;"></div>');
-      }
-      
-      var capturedBwa = [];
-
-      // Перехватываем добавление элементов в меню
-      var observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            $(mutation.addedNodes).each(function() {
-                if ($(this).hasClass('menu__item')) {
-                    var txt = $(this).find('.menu__text').text().trim().toLowerCase();
-                    if ((txt.indexOf('xsena') !== -1 || txt === 'клубничка') && $(this).attr('data-action') !== 'my_super_skaz') {
-                        // Вырываем из меню и складываем в сейф
-                        $(this).detach().appendTo('#bwa-vault');
-                        capturedBwa.push($(this));
-                    }
-                }
-            });
-        });
-      });
-
-      setTimeout(function() {
-        var menuList = $('.menu .menu__list').eq(0);
-        if (menuList.length) {
-            observer.observe(menuList[0], { childList: true });
-        }
-      }, 1000);
-
-      var button = $("<li class=\"menu__item selector\" data-action=\"my_super_skaz\">\n            <div class=\"menu__ico\">\n                <svg width=\"200\" height=\"243\" viewBox=\"0 0 200 243\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M187.714 130.727C206.862 90.1515 158.991 64.2019 100.983 64.2019C42.9759 64.2019 -4.33044 91.5669 10.875 130.727C26.0805 169.888 63.2501 235.469 100.983 234.997C138.716 234.526 168.566 171.303 187.714 130.727Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M102.11 62.3146C109.995 39.6677 127.46 28.816 169.692 24.0979C172.514 56.1811 135.338 64.2018 102.11 62.3146Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M90.8467 62.7863C90.2285 34.5178 66.0667 25.0419 31.7127 33.063C28.8904 65.1461 68.8826 62.7863 90.8467 62.7863Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M100.421 58.5402C115.627 39.6677 127.447 13.7181 85.2149 9C82.3926 41.0832 83.5258 35.4214 100.421 58.5402Z\" stroke=\"currentColor\" stroke-width=\"15\"/><rect x=\"39.0341\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"90.8467\" y=\"92.0388\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"140.407\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"116.753\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"64.9404\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"93.0994\" y=\"176.021\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/></svg>\n            </div>\n            <div class=\"menu__text\">" + Lampa.Lang.translate('lampac_sisiname') + "</div>\n        </li>");
+      var button = $("<li class=\"menu__item selector\" data-action=\"sisi\">\n            <div class=\"menu__ico\">\n                <svg width=\"200\" height=\"243\" viewBox=\"0 0 200 243\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M187.714 130.727C206.862 90.1515 158.991 64.2019 100.983 64.2019C42.9759 64.2019 -4.33044 91.5669 10.875 130.727C26.0805 169.888 63.2501 235.469 100.983 234.997C138.716 234.526 168.566 171.303 187.714 130.727Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M102.11 62.3146C109.995 39.6677 127.46 28.816 169.692 24.0979C172.514 56.1811 135.338 64.2018 102.11 62.3146Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M90.8467 62.7863C90.2285 34.5178 66.0667 25.0419 31.7127 33.063C28.8904 65.1461 68.8826 62.7863 90.8467 62.7863Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M100.421 58.5402C115.627 39.6677 127.447 13.7181 85.2149 9C82.3926 41.0832 83.5258 35.4214 100.421 58.5402Z\" stroke=\"currentColor\" stroke-width=\"15\"/><rect x=\"39.0341\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"90.8467\" y=\"92.0388\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"140.407\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"116.753\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"64.9404\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"93.0994\" y=\"176.021\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/></svg>\n            </div>\n            <div class=\"menu__text\">" + Lampa.Lang.translate('lampac_sisiname') + "</div>\n        </li>");
 
       if (true) {
         var pw = $('<div>s</div>');
@@ -361,95 +332,36 @@
       }
 
       button.on('hover:enter', function() {
-        Lampa.Noty.show('Загрузка источников...', {time: 2000});
-        
-        var items = [];
-
-        function showMenu() {
-            if (items.length === 0) {
-                Lampa.Noty.show('Источники не найдены', {style: 'error'});
-                return;
-            }
+        if (!Lampa.ParentalControl) Lampa.ParentalControl = { query: function(success, error) { if (typeof success === 'function') success(); } };
+        Lampa.ParentalControl.query(function() {
+          Api.menu(function(data) {
+            var items = [];
+            data.forEach(function(a) { a.title = Utils.sourceTitle(a.title); });
+            items = items.concat(data);
             Lampa.Select.show({
-                title: 'Сайты',
-                items: items,
-                onBack: function() { Lampa.Controller.toggle('menu'); },
-                onSelect: function(selected) {
-                    if (selected.action === 'skaz') {
-                        if (selected.data.playlist_url) {
-                            Lampa.Activity.push({ url: selected.data.playlist_url, title: selected.data.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
-                        } else {
-                            Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
-                        }
-                    } else if (selected.action === 'bwa') {
-                        var btn = selected.btn;
-                        // 1. Возвращаем кнопку на экран (в невидимый слой)
-                        btn.appendTo('body').css({ position: 'absolute', left: '0', top: '0', opacity: '0', 'pointer-events': 'none', display: 'block' });
-                        // 2. Программно нажимаем
-                        setTimeout(function() {
-                            btn.trigger('hover:enter');
-                            btn.trigger('click');
-                        }, 50);
-                        // 3. Убираем обратно в сейф
-                        setTimeout(function() {
-                            btn.detach().appendTo('#bwa-vault');
-                        }, 1000);
-                    }
-                }
+              title: 'Сайты', items: items,
+              onSelect: function onSelect(a) {
+                if (a.playlist_url) Lampa.Activity.push({ url: a.playlist_url, title: a.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
+                else Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
+              },
+              onBack: function onBack() { Lampa.Controller.toggle('menu'); }
             });
-        }
-
-        // 1. Загружаем SKAZ
-        Api.menu(function(data) {
-            data.forEach(function(a) {
-                items.push({ title: Utils.sourceTitle(a.title), action: 'skaz', data: a });
-            });
-            
-            // 2. Загружаем BWA (если еще не загружали)
-            if (capturedBwa.length === 0) {
-                if (!window.bwa_scripts_loaded_v15) {
-                    window.bwa_scripts_loaded_v15 = true;
-                    Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {});
-                }
-                
-                // Ждем, пока MutationObserver перехватит кнопки
-                var attempts = 0;
-                var timer = setInterval(function() {
-                    attempts++;
-                    if (capturedBwa.length > 0 || attempts > 20) {
-                        clearInterval(timer);
-                        capturedBwa.forEach(function(btn) {
-                            items.push({ title: btn.find('.menu__text').text().trim() || 'XSENA', action: 'bwa', btn: btn });
-                        });
-                        showMenu();
-                    }
-                }, 250);
-            } else {
-                capturedBwa.forEach(function(btn) {
-                    items.push({ title: btn.find('.menu__text').text().trim() || 'XSENA', action: 'bwa', btn: btn });
-                });
-                showMenu();
-            }
-        }, function() { 
-            // Если skaz упал, показываем хотя бы bwa
-            capturedBwa.forEach(function(btn) {
-                items.push({ title: btn.find('.menu__text').text().trim() || 'XSENA', action: 'bwa', btn: btn });
-            });
-            showMenu();
-        });
+          }, function(e) { if (typeof e == 'string') Lampa.Noty.show(e, {style: 'error', time: 8000}); });
+        }, function() {});
       });
-
+      
       setTimeout(function() {
         var menuList = $('.menu .menu__list').eq(0);
         if (menuList.length) {
            menuList.append(button);
+           console.log('Кнопка Клубничка успешно добавлена!');
         }
       }, 1500);
     }
 
     function init(){
       add();
-
+      
       if (!window.sisi_add_param_ready) {
         window.sisi_add_param_ready = true;
         Lampa.SettingsApi.addComponent({ component: 'sisi', name: Lampa.Lang.translate('lampac_sisiname'), icon: "<svg width=\"200\" height=\"243\" viewBox=\"0 0 200 243\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M187.714 130.727C206.862 90.1515 158.991 64.2019 100.983 64.2019C42.9759 64.2019 -4.33044 91.5669 10.875 130.727C26.0805 169.888 63.2501 235.469 100.983 234.997C138.716 234.526 168.566 171.303 187.714 130.727Z\" stroke=\"currentColor\" stroke-width=\"15\"/></svg>" });
