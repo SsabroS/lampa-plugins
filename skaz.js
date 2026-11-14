@@ -331,7 +331,6 @@
         button.find('.menu__ico').css('position', 'relative').append(pw);
       }
 
-      // ВОТ ЗДЕСЬ НОВАЯ ЛОГИКА ВЫБОРА ИСТОЧНИКА
       button.on('hover:enter', function() {
         Lampa.Select.show({
           title: 'Выбор источника',
@@ -342,25 +341,27 @@
           onBack: function() { Lampa.Controller.toggle('menu'); },
           onSelect: function(a) {
             if (a.action === 'skaz') {
-              // Запуск старого варианта
               if (!Lampa.ParentalControl) Lampa.ParentalControl = { query: function(success, error) { if (typeof success === 'function') success(); } };
               Lampa.ParentalControl.query(function() {
                 Api.menu(function(data) {
                   var items = [];
-                  data.forEach(function(a) { a.title = Utils.sourceTitle(a.title); });
+                  data.forEach(function(item) { item.title = Utils.sourceTitle(item.title); });
                   items = items.concat(data);
                   Lampa.Select.show({
-                    title: 'Сайты', items: items,
-                    onSelect: function onSelect(a) {
-                      if (a.playlist_url) Lampa.Activity.push({ url: a.playlist_url, title: a.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
-                      else Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
+                    title: 'Сайты',
+                    items: items,
+                    onSelect: function onSelect(item) {
+                      if (item.playlist_url) {
+                        Lampa.Activity.push({ url: item.playlist_url, title: item.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
+                      } else {
+                        Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
+                      }
                     },
                     onBack: function onBack() { Lampa.Controller.toggle('menu'); }
                   });
                 }, function(e) { if (typeof e == 'string') Lampa.Noty.show(e, {style: 'error', time: 8000}); });
               }, function() {});
             } else if (a.action === 'bwa') {
-              // Запуск агрегатора bwa.ad
               Lampa.Noty.show('Загрузка агрегатора bwa.ad...', { time: 3000 });
               Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {
                 Lampa.Noty.show('Готово! Новые кнопки должны появиться в меню.', { time: 5000 });
