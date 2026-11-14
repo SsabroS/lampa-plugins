@@ -319,7 +319,7 @@
 
     Lampa.Component.add('sisi_' + Defined.use_api, Sisi);
     Lampa.Component.add('sisi_view_' + Defined.use_api, View); 
-    
+
     try { Lampa.Search.addSource(Search); } catch(e) {}
 
     function add() {
@@ -331,25 +331,46 @@
         button.find('.menu__ico').css('position', 'relative').append(pw);
       }
 
+      // ВОТ ЗДЕСЬ НОВАЯ ЛОГИКА ВЫБОРА ИСТОЧНИКА
       button.on('hover:enter', function() {
-        if (!Lampa.ParentalControl) Lampa.ParentalControl = { query: function(success, error) { if (typeof success === 'function') success(); } };
-        Lampa.ParentalControl.query(function() {
-          Api.menu(function(data) {
-            var items = [];
-            data.forEach(function(a) { a.title = Utils.sourceTitle(a.title); });
-            items = items.concat(data);
-            Lampa.Select.show({
-              title: 'Сайты', items: items,
-              onSelect: function onSelect(a) {
-                if (a.playlist_url) Lampa.Activity.push({ url: a.playlist_url, title: a.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
-                else Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
-              },
-              onBack: function onBack() { Lampa.Controller.toggle('menu'); }
-            });
-          }, function(e) { if (typeof e == 'string') Lampa.Noty.show(e, {style: 'error', time: 8000}); });
-        }, function() {});
+        Lampa.Select.show({
+          title: 'Выбор источника',
+          items: [
+            { title: 'si.skaz.tv (Клубничка)', action: 'skaz' },
+            { title: 'bwa.ad (Агрегатор)', action: 'bwa' }
+          ],
+          onBack: function() { Lampa.Controller.toggle('menu'); },
+          onSelect: function(a) {
+            if (a.action === 'skaz') {
+              // Запуск старого варианта
+              if (!Lampa.ParentalControl) Lampa.ParentalControl = { query: function(success, error) { if (typeof success === 'function') success(); } };
+              Lampa.ParentalControl.query(function() {
+                Api.menu(function(data) {
+                  var items = [];
+                  data.forEach(function(a) { a.title = Utils.sourceTitle(a.title); });
+                  items = items.concat(data);
+                  Lampa.Select.show({
+                    title: 'Сайты', items: items,
+                    onSelect: function onSelect(a) {
+                      if (a.playlist_url) Lampa.Activity.push({ url: a.playlist_url, title: a.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
+                      else Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
+                    },
+                    onBack: function onBack() { Lampa.Controller.toggle('menu'); }
+                  });
+                }, function(e) { if (typeof e == 'string') Lampa.Noty.show(e, {style: 'error', time: 8000}); });
+              }, function() {});
+            } else if (a.action === 'bwa') {
+              // Запуск агрегатора bwa.ad
+              Lampa.Noty.show('Загрузка агрегатора bwa.ad...', { time: 3000 });
+              Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {
+                Lampa.Noty.show('Готово! Новые кнопки должны появиться в меню.', { time: 5000 });
+              });
+              Lampa.Controller.toggle('menu');
+            }
+          }
+        });
       });
-      
+
       setTimeout(function() {
         var menuList = $('.menu .menu__list').eq(0);
         if (menuList.length) {
@@ -361,7 +382,7 @@
 
     function init(){
       add();
-      
+
       if (!window.sisi_add_param_ready) {
         window.sisi_add_param_ready = true;
         Lampa.SettingsApi.addComponent({ component: 'sisi', name: Lampa.Lang.translate('lampac_sisiname'), icon: "<svg width=\"200\" height=\"243\" viewBox=\"0 0 200 243\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M187.714 130.727C206.862 90.1515 158.991 64.2019 100.983 64.2019C42.9759 64.2019 -4.33044 91.5669 10.875 130.727C26.0805 169.888 63.2501 235.469 100.983 234.997C138.716 234.526 168.566 171.303 187.714 130.727Z\" stroke=\"currentColor\" stroke-width=\"15\"/></svg>" });
