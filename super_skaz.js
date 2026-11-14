@@ -323,7 +323,6 @@
     try { Lampa.Search.addSource(Search); } catch(e) {}
 
     function add() {
-      // Уникальный data-action для нашей кнопки
       var button = $("<li class=\"menu__item selector\" data-action=\"my_super_skaz\">\n            <div class=\"menu__ico\">\n                <svg width=\"200\" height=\"243\" viewBox=\"0 0 200 243\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M187.714 130.727C206.862 90.1515 158.991 64.2019 100.983 64.2019C42.9759 64.2019 -4.33044 91.5669 10.875 130.727C26.0805 169.888 63.2501 235.469 100.983 234.997C138.716 234.526 168.566 171.303 187.714 130.727Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M102.11 62.3146C109.995 39.6677 127.46 28.816 169.692 24.0979C172.514 56.1811 135.338 64.2018 102.11 62.3146Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M90.8467 62.7863C90.2285 34.5178 66.0667 25.0419 31.7127 33.063C28.8904 65.1461 68.8826 62.7863 90.8467 62.7863Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M100.421 58.5402C115.627 39.6677 127.447 13.7181 85.2149 9C82.3926 41.0832 83.5258 35.4214 100.421 58.5402Z\" stroke=\"currentColor\" stroke-width=\"15\"/><rect x=\"39.0341\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"90.8467\" y=\"92.0388\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"140.407\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"116.753\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"64.9404\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"93.0994\" y=\"176.021\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/></svg>\n            </div>\n            <div class=\"menu__text\">" + Lampa.Lang.translate('lampac_sisiname') + "</div>\n        </li>");
 
       if (true) {
@@ -336,8 +335,8 @@
         Lampa.Select.show({
           title: 'Выбор источника',
           items: [
-            { title: 'si.skaz.tv (Клубничка)', action: 'skaz' },
-            { title: 'bwa.ad (Агрегатор)', action: 'bwa' }
+            { title: 'Si.skaz.tv (Клубничка)', action: 'skaz' },
+            { title: 'Bwa.ad (Агрегатор)', action: 'bwa' }
           ],
           onBack: function() { Lampa.Controller.toggle('menu'); },
           onSelect: function(a) {
@@ -364,79 +363,66 @@
               }, function() {});
             } else if (a.action === 'bwa') {
               
-              // Проверяем, есть ли уже спрятанные кнопки от bwa.ad
-              var existingBtns = $('.bwa-hidden-btn');
-              if (existingBtns.length > 0) {
-                  showBwaSelection(existingBtns);
+              var findBwaButtons = function() {
+                  var btns = [];
+                  $('.menu .menu__list .menu__item').each(function() {
+                      var action = $(this).attr('data-action');
+                      var txt = $(this).find('.menu__text').text().trim().toLowerCase();
+                      // Ищем кнопки xsena (не наши)
+                      if (action !== 'my_super_skaz' && (txt.indexOf('xsena') !== -1 || txt === 'клубничка')) {
+                          if (!$(this).hasClass('bwa-hidden')) {
+                              $(this).hide();
+                              $(this).addClass('bwa-hidden');
+                          }
+                          btns.push($(this));
+                      }
+                  });
+                  return btns;
+              };
+
+              var existing = findBwaButtons();
+              if (existing.length > 0) {
+                  showBwaMenu(existing);
                   return;
               }
 
-              Lampa.Noty.show('Загрузка источников bwa.ad...', { time: 2000 });
+              Lampa.Noty.show('Загрузка BWA...', { time: 2000 });
 
               if (!window.bwa_scripts_loaded) {
                   window.bwa_scripts_loaded = true;
                   Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {});
               }
 
-              // Ждем загрузки скриптов и перехватываем новые кнопки
-              var observer = new MutationObserver(function(mutations) {
-                  mutations.forEach(function(mutation) {
-                      $(mutation.addedNodes).each(function() {
-                          if ($(this).hasClass('menu__item')) {
-                              var txt = $(this).find('.menu__text').text().trim().toLowerCase();
-                              if (txt.indexOf('xsena') !== -1 && $(this).attr('data-action') !== 'my_super_skaz') {
-                                  $(this).hide();
-                                  $(this).addClass('bwa-hidden-btn');
-                              }
-                          }
-                      });
-                  });
-              });
-
-              var menuList = $('.menu .menu__list').eq(0);
-              if (menuList.length) observer.observe(menuList[0], { childList: true });
-
-              // Принудительно ищем их, если они уже добавились
-              setTimeout(function() {
-                  $('.menu .menu__list .menu__item').each(function() {
-                      var txt = $(this).find('.menu__text').text().trim().toLowerCase();
-                      if (txt.indexOf('xsena') !== -1 && $(this).attr('data-action') !== 'my_super_skaz' && !$(this).hasClass('bwa-hidden-btn')) {
-                          $(this).hide();
-                          $(this).addClass('bwa-hidden-btn');
-                      }
-                  });
-              }, 1000);
-
-              // Открываем меню через 2.5 секунды
-              setTimeout(function() {
-                  observer.disconnect();
-                  var finalBtns = $('.bwa-hidden-btn');
-                  if (finalBtns.length > 0) {
-                      showBwaSelection(finalBtns);
-                  } else {
-                      Lampa.Noty.show('Кнопки xsena не найдены', {style: 'error'});
+              var attempts = 0;
+              var timer = setInterval(function() {
+                  attempts++;
+                  var btns = findBwaButtons();
+                  if (btns.length > 0) {
+                      clearInterval(timer);
+                      showBwaMenu(btns);
+                  } else if (attempts > 25) { // ~5 секунд
+                      clearInterval(timer);
+                      Lampa.Noty.show('Не удалось найти источники BWA', { style: 'error' });
                   }
-              }, 2500);
+              }, 200);
 
-              function showBwaSelection(btns) {
+              function showBwaMenu(btns) {
                   var items = [];
-                  var counts = {};
-                  btns.each(function() {
-                      var text = $(this).find('.menu__text').text().trim() || 'xsena.red';
-                      counts[text] = (counts[text] || 0) + 1;
-                      var displayTitle = text + (counts[text] > 1 ? ' (' + counts[text] + ')' : '');
+                  btns.forEach(function(btn, index) {
+                      var title = btn.find('.menu__text').text().trim() || 'XSENA';
                       items.push({
-                          title: displayTitle,
-                          btn: $(this)
+                          title: title,
+                          btn: btn
                       });
                   });
 
                   Lampa.Select.show({
-                      title: 'xsena red',
+                      title: 'XSENA',
                       items: items,
                       onBack: function() { Lampa.Controller.toggle('menu'); },
                       onSelect: function(item) {
-                          item.btn.trigger('hover:enter');
+                          Lampa.Controller.toggle('menu');
+                          item.btn.trigger('hover:enter'); // Нажимаем спрятанную кнопку
                       }
                   });
               }
