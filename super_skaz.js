@@ -16,9 +16,7 @@
   Lampa.Lang.add({
     lampac_sisiname: {
       ru: 'Клубничка',
-      en: 'Strawberry',
-      uk: 'Полуничка',
-      zh: '草莓'
+      en: 'Strawberry'
     }
   });
 
@@ -332,103 +330,94 @@
       }
 
       button.on('hover:enter', function() {
-        Lampa.Select.show({
-          title: 'Выбор источника',
-          items: [
-            { title: 'Si.skaz.tv (Клубничка)', action: 'skaz' },
-            { title: 'Bwa.ad (Агрегатор)', action: 'bwa' }
-          ],
-          onBack: function() { Lampa.Controller.toggle('menu'); },
-          onSelect: function(a) {
-            if (a.action === 'skaz') {
-              if (!Lampa.ParentalControl) Lampa.ParentalControl = { query: function(success, error) { if (typeof success === 'function') success(); } };
-              Lampa.ParentalControl.query(function() {
-                Api.menu(function(data) {
-                  var items = [];
-                  data.forEach(function(item) { item.title = Utils.sourceTitle(item.title); });
-                  items = items.concat(data);
-                  Lampa.Select.show({
-                    title: 'Сайты',
-                    items: items,
-                    onSelect: function onSelect(item) {
-                      if (item.playlist_url) {
-                        Lampa.Activity.push({ url: item.playlist_url, title: item.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
-                      } else {
-                        Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
-                      }
-                    },
-                    onBack: function onBack() { Lampa.Controller.toggle('menu'); }
-                  });
-                }, function(e) { if (typeof e == 'string') Lampa.Noty.show(e, {style: 'error', time: 8000}); });
-              }, function() {});
-            } else if (a.action === 'bwa') {
-              
-              var findBwaButtons = function() {
-                  var btns = [];
-                  $('.menu .menu__list .menu__item').each(function() {
-                      var action = $(this).attr('data-action');
-                      var txt = $(this).find('.menu__text').text().trim().toLowerCase();
-                      // Ищем кнопки xsena (не наши)
-                      if (action !== 'my_super_skaz' && (txt.indexOf('xsena') !== -1 || txt === 'клубничка')) {
-                          if (!$(this).hasClass('bwa-hidden')) {
-                              $(this).hide();
-                              $(this).addClass('bwa-hidden');
-                          }
-                          btns.push($(this));
-                      }
-                  });
-                  return btns;
-              };
+        Lampa.Noty.show('Загрузка источников...', {time: 2000});
+        
+        var skazData = null;
+        var bwaReady = false;
 
-              var existing = findBwaButtons();
-              if (existing.length > 0) {
-                  showBwaMenu(existing);
-                  return;
-              }
-
-              Lampa.Noty.show('Загрузка BWA...', { time: 2000 });
-
-              if (!window.bwa_scripts_loaded) {
-                  window.bwa_scripts_loaded = true;
-                  Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {});
-              }
-
-              var attempts = 0;
-              var timer = setInterval(function() {
-                  attempts++;
-                  var btns = findBwaButtons();
-                  if (btns.length > 0) {
-                      clearInterval(timer);
-                      showBwaMenu(btns);
-                  } else if (attempts > 25) { // ~5 секунд
-                      clearInterval(timer);
-                      Lampa.Noty.show('Не удалось найти источники BWA', { style: 'error' });
-                  }
-              }, 200);
-
-              function showBwaMenu(btns) {
-                  var items = [];
-                  btns.forEach(function(btn, index) {
-                      var title = btn.find('.menu__text').text().trim() || 'XSENA';
-                      items.push({
-                          title: title,
-                          btn: btn
-                      });
-                  });
-
-                  Lampa.Select.show({
-                      title: 'XSENA',
-                      items: items,
-                      onBack: function() { Lampa.Controller.toggle('menu'); },
-                      onSelect: function(item) {
-                          Lampa.Controller.toggle('menu');
-                          item.btn.trigger('hover:enter'); // Нажимаем спрятанную кнопку
-                      }
-                  });
-              }
-            }
-          }
+        Api.menu(function(data) {
+          skazData = data;
+          if (bwaReady) showMenu();
+        }, function(e) { 
+          if (bwaReady) showMenu(); 
         });
+
+        var existingBwa = $('.menu__item[data-bwa-hidden="true"]');
+        if (existingBwa.length > 0) {
+          bwaReady = true;
+          if (skazData) showMenu();
+        } else {
+          if (!window.bwa_scripts_loaded) {
+              window.bwa_scripts_loaded = true;
+              Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {});
+          }
+
+          var attempts = 0;
+          var timer = setInterval(function() {
+              attempts++;
+              var found = false;
+              $('.menu .menu__list .menu__item').each(function() {
+                  var txt = $(this).find('.menu__text').text().trim().toLowerCase();
+                  if (txt.indexOf('xsena') !== -1 && $(this).attr('data-action') !== 'my_super_skaz') {
+                      $(this).hide();
+                      $(this).attr('data-bwa-hidden', 'true');
+                      found = true;
+                  }
+              });
+
+              if (found || attempts > 25) { 
+                  clearInterval(timer);
+                  bwaReady = true;
+                  if (skazData) showMenu();
+              }
+          }, 200);
+        }
+
+        function showMenu() {
+          var items = [];
+          
+          if (skazData) {
+              skazData.forEach(function(a) {
+                  items.push({
+                      title: Utils.sourceTitle(a.title),
+                      action: 'skaz',
+                      data: a
+                  });
+              });
+          }
+
+          var bwaBtns = $('.menu__item[data-bwa-hidden="true"]');
+          bwaBtns.each(function(index) {
+              var text = $(this).find('.menu__text').text().trim() || 'XSENA';
+              items.push({
+                  title: text + (index > 0 ? ' ' + (index + 1) : ''),
+                  action: 'bwa',
+                  btn: $(this)
+              });
+          });
+
+          if (items.length === 0) {
+              Lampa.Noty.show('Источники не найдены', {style: 'error'});
+              return;
+          }
+
+          Lampa.Select.show({
+              title: 'Сайты',
+              items: items,
+              onBack: function() { Lampa.Controller.toggle('menu'); },
+              onSelect: function(selected) {
+                  if (selected.action === 'skaz') {
+                      if (selected.data.playlist_url) {
+                          Lampa.Activity.push({ url: selected.data.playlist_url, title: selected.data.title, component: 'sisi_view_' + Defined.use_api, page: 1 });
+                      } else {
+                          Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
+                      }
+                  } else if (selected.action === 'bwa') {
+                      selected.btn.trigger('hover:enter');
+                  }
+              }
+          });
+        }
       });
 
       setTimeout(function() {
