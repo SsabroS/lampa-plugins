@@ -322,6 +322,36 @@
     try { Lampa.Search.addSource(Search); } catch(e) {}
 
     function add() {
+      // Скрытый контейнер для наших изъятых кнопок
+      if (!$('#bwa-vault').length) {
+          $('body').append('<div id="bwa-vault" style="display:none;"></div>');
+      }
+      
+      var capturedBwa = [];
+
+      // Перехватываем добавление элементов в меню
+      var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            $(mutation.addedNodes).each(function() {
+                if ($(this).hasClass('menu__item')) {
+                    var txt = $(this).find('.menu__text').text().trim().toLowerCase();
+                    if ((txt.indexOf('xsena') !== -1 || txt === 'клубничка') && $(this).attr('data-action') !== 'my_super_skaz') {
+                        // Вырываем из меню и складываем в сейф
+                        $(this).detach().appendTo('#bwa-vault');
+                        capturedBwa.push($(this));
+                    }
+                }
+            });
+        });
+      });
+
+      setTimeout(function() {
+        var menuList = $('.menu .menu__list').eq(0);
+        if (menuList.length) {
+            observer.observe(menuList[0], { childList: true });
+        }
+      }, 1000);
+
       var button = $("<li class=\"menu__item selector\" data-action=\"my_super_skaz\">\n            <div class=\"menu__ico\">\n                <svg width=\"200\" height=\"243\" viewBox=\"0 0 200 243\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M187.714 130.727C206.862 90.1515 158.991 64.2019 100.983 64.2019C42.9759 64.2019 -4.33044 91.5669 10.875 130.727C26.0805 169.888 63.2501 235.469 100.983 234.997C138.716 234.526 168.566 171.303 187.714 130.727Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M102.11 62.3146C109.995 39.6677 127.46 28.816 169.692 24.0979C172.514 56.1811 135.338 64.2018 102.11 62.3146Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M90.8467 62.7863C90.2285 34.5178 66.0667 25.0419 31.7127 33.063C28.8904 65.1461 68.8826 62.7863 90.8467 62.7863Z\" stroke=\"currentColor\" stroke-width=\"15\"/><path d=\"M100.421 58.5402C115.627 39.6677 127.447 13.7181 85.2149 9C82.3926 41.0832 83.5258 35.4214 100.421 58.5402Z\" stroke=\"currentColor\" stroke-width=\"15\"/><rect x=\"39.0341\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"90.8467\" y=\"92.0388\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"140.407\" y=\"98.644\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"116.753\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"64.9404\" y=\"139.22\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/><rect x=\"93.0994\" y=\"176.021\" width=\"19.1481\" height=\"30.1959\" rx=\"9.57407\" fill=\"currentColor\"/></svg>\n            </div>\n            <div class=\"menu__text\">" + Lampa.Lang.translate('lampac_sisiname') + "</div>\n        </li>");
 
       if (true) {
@@ -330,31 +360,16 @@
         button.find('.menu__ico').css('position', 'relative').append(pw);
       }
 
-      // СРАЗУ ЗАПУСКАЕМ СБОР ИСТОЧНИКОВ ПРИ КЛИКЕ
       button.on('hover:enter', function() {
-        Lampa.Noty.show('Загрузка источников...', {time: 3000});
+        Lampa.Noty.show('Загрузка источников...', {time: 2000});
         
-        var skazItems = [];
-        var bwaItems = [];
-        var currentStep = 0;
-        var totalSteps = 2;
+        var items = [];
 
-        function tryShowMenu() {
-            currentStep++;
-            if (currentStep < totalSteps) return;
-
-            var items = [];
-            // Сначала сайты skaz
-            skazItems.forEach(function(i) { items.push(i); });
-            // Потом сайты bwa
-            bwaItems.forEach(function(i) { items.push(i); });
-
+        function showMenu() {
             if (items.length === 0) {
                 Lampa.Noty.show('Источники не найдены', {style: 'error'});
                 return;
             }
-
-            // ВЫВОДИМ ОДНО ЕДИНОЕ МЕНЮ "САЙТЫ"
             Lampa.Select.show({
                 title: 'Сайты',
                 items: items,
@@ -367,8 +382,18 @@
                             Lampa.Activity.push({ url: '', title: Lampa.Lang.translate('lampac_sisiname'), component: 'sisi_' + Defined.use_api, page: 1 });
                         }
                     } else if (selected.action === 'bwa') {
-                        // Нажимаем спрятанную кнопку xsena
-                        selected.btn.trigger('hover:enter');
+                        var btn = selected.btn;
+                        // 1. Возвращаем кнопку на экран (в невидимый слой)
+                        btn.appendTo('body').css({ position: 'absolute', left: '0', top: '0', opacity: '0', 'pointer-events': 'none', display: 'block' });
+                        // 2. Программно нажимаем
+                        setTimeout(function() {
+                            btn.trigger('hover:enter');
+                            btn.trigger('click');
+                        }, 50);
+                        // 3. Убираем обратно в сейф
+                        setTimeout(function() {
+                            btn.detach().appendTo('#bwa-vault');
+                        }, 1000);
                     }
                 }
             });
@@ -377,67 +402,47 @@
         // 1. Загружаем SKAZ
         Api.menu(function(data) {
             data.forEach(function(a) {
-                skazItems.push({
-                    title: Utils.sourceTitle(a.title),
-                    action: 'skaz',
-                    data: a
-                });
+                items.push({ title: Utils.sourceTitle(a.title), action: 'skaz', data: a });
             });
-            tryShowMenu();
-        }, function() { tryShowMenu(); });
-
-        // 2. Загружаем BWA
-        var hiddenBwa = $('.bwa-hidden-final');
-        if (hiddenBwa.length > 0) {
-            hiddenBwa.each(function() {
-                bwaItems.push({
-                    title: $(this).find('.menu__text').text().trim() || 'XSENA',
-                    action: 'bwa',
-                    btn: $(this)
-                });
-            });
-            tryShowMenu();
-        } else {
-            if (!window.bwa_scripts_loaded_final) {
-                window.bwa_scripts_loaded_final = true;
-                Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {});
-            }
-
-            // Ищем кнопки bwa в меню и моментально их скрываем
-            var attempts = 0;
-            var timer = setInterval(function() {
-                attempts++;
-                var found = false;
-                $('.menu .menu__list .menu__item').each(function() {
-                    var text = $(this).find('.menu__text').text().trim().toLowerCase();
-                    // Если это xsena или клубничка (но не наша кнопка)
-                    if ((text.indexOf('xsena') !== -1 || text === 'клубничка') && $(this).attr('data-action') !== 'my_super_skaz' && !$(this).hasClass('bwa-hidden-final')) {
-                        $(this).css('display', 'none !important'); // Прячем жестко
-                        $(this).addClass('bwa-hidden-final');
-                        found = true;
-                    }
-                });
-
-                if (found || attempts > 25) { // Ждем до 5 секунд
-                    clearInterval(timer);
-                    $('.bwa-hidden-final').each(function() {
-                        bwaItems.push({
-                            title: $(this).find('.menu__text').text().trim() || 'XSENA',
-                            action: 'bwa',
-                            btn: $(this)
-                        });
-                    });
-                    tryShowMenu();
+            
+            // 2. Загружаем BWA (если еще не загружали)
+            if (capturedBwa.length === 0) {
+                if (!window.bwa_scripts_loaded_v15) {
+                    window.bwa_scripts_loaded_v15 = true;
+                    Lampa.Utils.putScriptAsync(['http://bwa.ad/re'], function() {});
                 }
-            }, 200);
-        }
+                
+                // Ждем, пока MutationObserver перехватит кнопки
+                var attempts = 0;
+                var timer = setInterval(function() {
+                    attempts++;
+                    if (capturedBwa.length > 0 || attempts > 20) {
+                        clearInterval(timer);
+                        capturedBwa.forEach(function(btn) {
+                            items.push({ title: btn.find('.menu__text').text().trim() || 'XSENA', action: 'bwa', btn: btn });
+                        });
+                        showMenu();
+                    }
+                }, 250);
+            } else {
+                capturedBwa.forEach(function(btn) {
+                    items.push({ title: btn.find('.menu__text').text().trim() || 'XSENA', action: 'bwa', btn: btn });
+                });
+                showMenu();
+            }
+        }, function() { 
+            // Если skaz упал, показываем хотя бы bwa
+            capturedBwa.forEach(function(btn) {
+                items.push({ title: btn.find('.menu__text').text().trim() || 'XSENA', action: 'bwa', btn: btn });
+            });
+            showMenu();
+        });
       });
 
       setTimeout(function() {
         var menuList = $('.menu .menu__list').eq(0);
         if (menuList.length) {
            menuList.append(button);
-           console.log('Кнопка Клубничка успешно добавлена!');
         }
       }, 1500);
     }
