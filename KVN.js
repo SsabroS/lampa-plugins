@@ -17,14 +17,17 @@
 
             flag = document.createElement('img');
             flag.id = flagId;
-            flag.style.cssText = 'display:none;width:1.5em;height:auto;' +
-                'max-height:1.15em;object-fit:contain;margin:0 .45em;flex-shrink:0';
+            flag.style.cssText = 'display:none;align-self:center;width:2.05em;height:1.4em;' +
+                'object-fit:contain;margin:0 .45em;flex-shrink:0';
+
             flag.onload = function () {
                 flag.style.display = 'block';
             };
+
             flag.onerror = function () {
                 flag.style.display = 'none';
             };
+
             actions.insertBefore(flag, actions.firstChild);
         }
 
