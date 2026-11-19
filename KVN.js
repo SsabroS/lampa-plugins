@@ -75,7 +75,7 @@
     window.lampaIpCountryFlag = true;
 
     if (window.appready) start();
-    else lampa.Listener.follow('app', function (event) {
+    else window.Lampa.Listener.follow('app', function (event) {
         if (event.type === 'ready') start();
     });
 })();
