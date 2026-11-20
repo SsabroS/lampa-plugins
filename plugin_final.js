@@ -52,6 +52,9 @@
                 '\nwindow.dashenkaUnifiedAdapters[' + JSON.stringify(source.id) + '] = {' +
                 'menu: function (ok, fail) { Api.menu(ok, fail); },' +
                 'key: Defined.use_api,' +
+                'view: function (object, ok, fail) { Api.view(object, ok, fail); },' +
+                'play: function (element) { Utils.hidePreview(); Utils.play(element); },' +
+                'cardMenu: Utils.menu,' +
                 'format: Utils.sourceTitle' +
                 (source.id === 'xsena' ? ', showError: modal' : '') +
                 '};';
@@ -133,6 +136,8 @@
 
                         return {
                             title: title,
+                            playlistUrl: site.playlist_url,
+                            adapter: adapter,
                             open: function () {
                                 Lampa.Activity.push({
                                     url: site.playlist_url || '',
@@ -154,6 +159,113 @@
         });
     }
 
+    var savedComponent = 'dashenka_saved';
+
+    function savedKind(item) {
+        if (!item.playlistUrl) return '';
+        var title = item.title.trim().toLowerCase();
+        if (/\/(?:bookmarks?)(?:[/?#]|$)/i.test(item.playlistUrl) ||
+            /^(закладки|bookmarks?)$/.test(title)) return 'Закладки';
+        if (/\/history(?:[/?#]|$)/i.test(item.playlistUrl) ||
+            /^(история(?: просмотров)?|history)$/.test(title)) return 'История';
+        return '';
+    }
+
+    function groupSavedItems(items) {
+        var groups = {};
+        var result = [];
+
+        items.forEach(function (item) {
+            var kind = savedKind(item);
+            if (!kind) {
+                result.push(item);
+                return;
+            }
+
+            if (!groups[kind]) {
+                var entries = groups[kind] = [];
+                result.push({
+                    title: kind,
+                    open: function () {
+                        Lampa.Activity.push({
+                            component: savedComponent,
+                            title: kind,
+                            entries: entries,
+                            page: 1
+                        });
+                    }
+                });
+            }
+
+            groups[kind].push(item);
+        });
+
+        return result;
+    }
+
+    function SavedView(object) {
+        var comp = new Lampa.InteractionCategory(object);
+        var origin = new WeakMap();
+
+        function readPage(page, resolve, reject) {
+            Promise.all(object.entries.map(function (entry) {
+                return new Promise(function (done) {
+                    var timer = setTimeout(function () { done(null); }, 12000);
+
+                    function finish(data) {
+                        clearTimeout(timer);
+                        done(data || null);
+                    }
+
+                    try {
+                        entry.adapter.view({url: entry.playlistUrl, page: page}, finish, function () {
+                            finish(null);
+                        });
+                    } catch (error) {
+                        finish(null);
+                    }
+                }).then(function (data) {
+                    if (!data || !Array.isArray(data.results)) return null;
+                    data.results.forEach(function (card) { origin.set(card, entry.adapter); });
+                    return data;
+                });
+            })).then(function (groups) {
+                var results = [];
+                var totalPages = 1;
+                var success = false;
+
+                groups.forEach(function (group) {
+                    if (!group) return;
+                    success = true;
+                    results = results.concat(group.results);
+                    totalPages = Math.max(totalPages, Number(group.total_pages) || 1);
+                });
+
+                if (success) resolve({results: results, total_pages: totalPages, collection: true});
+                else reject();
+            });
+        }
+
+        comp.create = function () {
+            var view = this;
+            this.activity.loader(true);
+            readPage(1, function (data) { view.build(data); }, this.empty.bind(this));
+        };
+
+        comp.nextPageReuest = function (params, resolve, reject) {
+            readPage(params.page, resolve.bind(this), reject.bind(this));
+        };
+
+        comp.cardRender = function (params, element, card) {
+            var adapter = origin.get(element);
+            if (!adapter) return;
+            card.onEnter = function () { adapter.play(element); };
+            card.onMenu = function (target) { return adapter.cardMenu(target, element); };
+        };
+
+        return comp;
+    }
+
     var opening = false;
 
     function openMenu() {
@@ -171,7 +283,7 @@
 
             Lampa.Select.show({
                 title: 'Дашенька',
-                items: items,
+                items: groupSavedItems(items),
                 onSelect: function (item) { item.open(); },
                 onBack: function () { Lampa.Controller.toggle('menu'); }
             });
@@ -182,6 +294,8 @@
         var style = document.createElement('style');
         style.textContent = '.ad-preroll { display: none !important; }';
         document.head.appendChild(style);
+
+        Lampa.Component.add(savedComponent, SavedView);
 
         Promise.all(sources.map(installSource)).then(function () {
             Lampa.Menu.addButton('<span aria-hidden="true">★</span>', 'Дашенька', function () {
