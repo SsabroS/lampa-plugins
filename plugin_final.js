@@ -42,6 +42,10 @@
     }
 
     function start() {
+        var style = document.createElement('style');
+        style.textContent = '.ad-preroll { display: none !important; }';
+        document.head.appendChild(style);
+
         var observer = new MutationObserver(renameMenuItems);
         observer.observe(document.body, {
             childList: true,
