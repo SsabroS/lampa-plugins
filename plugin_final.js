@@ -349,7 +349,18 @@
 
     function start() {
         var style = document.createElement('style');
-        style.textContent = '.ad-preroll { display: none !important; }';
+        style.textContent = [
+            '.ad-preroll { display: none !important; }',
+            /* 4 карточки в ряд */
+            '.layer--grid .card,',
+            '.items-cards .card,',
+            '.category-full .card,',
+            '.scroll--mask .card {',
+            '    width: 23.5% !important;',
+            '    max-width: 23.5% !important;',
+            '    flex: 0 0 23.5% !important;',
+            '}'
+        ].join('\n');
         document.head.appendChild(style);
 
         Lampa.Component.add(savedComponent, SavedView);
