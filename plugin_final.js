@@ -268,6 +268,61 @@
 
     var opening = false;
 
+    function dedupeTitles(items) {
+        // Группируем только обычные сайты (не Закладки/Историю)
+        var regular = [];
+        var special = [];
+
+        items.forEach(function (item) {
+            if (savedKind(item)) {
+                special.push(item);
+            } else {
+                regular.push(item);
+            }
+        });
+
+        var groups = {};
+        var order = [];
+
+        regular.forEach(function (item) {
+            var key = (item.title || '').trim().toLowerCase();
+            if (!groups[key]) {
+                groups[key] = [];
+                order.push(key);
+            }
+            groups[key].push(item);
+        });
+
+        var result = [];
+        order.forEach(function (key) {
+            var list = groups[key];
+            if (list.length === 1) {
+                result.push(list[0]);
+            } else {
+                list.forEach(function (item, index) {
+                    var newTitle = item.title + ' V' + (index + 1);
+                    item.title = newTitle;
+
+                    // Переопределяем open — оригинальный title захвачен в замыкании
+                    if (item.playlistUrl && item.adapter) {
+                        item.open = function () {
+                            Lampa.Activity.push({
+                                url: item.playlistUrl || '',
+                                title: newTitle,
+                                component: (item.playlistUrl ? 'sisi_view_' : 'sisi_') + item.adapter.key,
+                                page: 1
+                            });
+                        };
+                    }
+                    result.push(item);
+                });
+            }
+        });
+
+        // Сначала обычные сайты (с дедупликацией), потом специальные
+        return result.concat(special);
+    }
+
     function openMenu() {
         if (opening) return;
         opening = true;
@@ -280,6 +335,8 @@
                 Lampa.Noty.show('Список сайтов пуст');
                 return;
             }
+
+            items = dedupeTitles(items);
 
             Lampa.Select.show({
                 title: 'Дашенька',
@@ -298,14 +355,7 @@
         Lampa.Component.add(savedComponent, SavedView);
 
         Promise.all(sources.map(installSource)).then(function () {
-            Lampa.Menu.addButton('<span aria-hidden="true">★</span>', 'Дашенька', function () {
-                var control = Lampa.ParentalControl;
-                if (control && typeof control.query === 'function') {
-                    control.query(openMenu, function () {});
-                } else {
-                    openMenu();
-                }
-            });
+            Lampa.Menu.addButton('<span aria-hidden="true">★</span>', 'Дашенька', openMenu);
         });
     }
 
