@@ -5,7 +5,7 @@
     if (window.lan_media_initialized) return;
     window.lan_media_initialized = true;
 
-    var VERSION = '0.4.1';
+    var VERSION = '0.5.0';
     var STORAGE_KEY = 'lan_media_devices';
 
     var DEFAULT_DEVICES = [
@@ -517,11 +517,65 @@
     // --------------------------------------------------
 
     function openLanMedia() {
-        Lampa.Activity.push({
-            title: 'LAN Media',
-            component: 'lan_media',
-            page: 1
+        var items = [];
+
+        devices.forEach(function (device) {
+            items.push({
+                title: 'Проверить ' + device.name,
+                open: function () {
+                    checkDevice(device, function (result) {
+                        var message = result.ok
+                            ? '✓ ' + result.message
+                            : '✗ ' + result.message;
+
+                        if (result.details) {
+                            message += ' — ' + result.details;
+                        }
+
+                        console.log('[LAN Media]', device.name, result);
+                        notify(device.name + ': ' + message);
+                    });
+                }
+            });
         });
+
+        items.push({
+            title: 'Проверить все NAS',
+            open: function () {
+                devices.forEach(function (device) {
+                    checkDevice(device, function (result) {
+                        var message = result.ok
+                            ? '✓ ' + result.message
+                            : '✗ ' + result.message;
+
+                        if (result.details) {
+                            message += ' — ' + result.details;
+                        }
+
+                        console.log('[LAN Media]', device.name, result);
+                        notify(device.name + ': ' + message);
+                    });
+                });
+            }
+        });
+
+        if (Lampa.Select && typeof Lampa.Select.show === 'function') {
+            Lampa.Select.show({
+                title: 'LAN Media',
+                items: items,
+                onSelect: function (item) {
+                    if (item && typeof item.open === 'function') item.open();
+                },
+                onBack: function () {
+                    if (Lampa.Controller && typeof Lampa.Controller.toggle === 'function') {
+                        Lampa.Controller.toggle('menu');
+                    }
+                }
+            });
+        } else {
+            notify('В этой версии Lampa недоступен штатный список Select');
+            console.error('[LAN Media] Lampa.Select.show is unavailable');
+        }
     }
 
     function addMenuButton() {
