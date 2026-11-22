@@ -5,8 +5,9 @@
     if (window.lan_media_initialized) return;
     window.lan_media_initialized = true;
 
-    var VERSION = '0.2.0';
+    var VERSION = '0.3.0';
     var STORAGE_KEY = 'lan_media_devices';
+    var MENU_CLASS = 'lan-media-menu';
 
     var DEFAULT_DEVICES = [
         {
@@ -30,11 +31,9 @@
     function loadDevices() {
         try {
             var saved = Lampa.Storage.get(STORAGE_KEY);
-
             devices = saved && Array.isArray(saved)
                 ? saved
                 : DEFAULT_DEVICES.slice();
-
         } catch (e) {
             devices = DEFAULT_DEVICES.slice();
         }
@@ -62,7 +61,10 @@
         return 'http://' + device.ip + ':' + device.port;
     }
 
-    // HTTP-запрос к NAS
+    // --------------------------------------------------
+    // HTTP-запросы к NAS
+    // --------------------------------------------------
+
     function request(url, callback) {
         if (!$ || !$.ajax) {
             callback('jQuery AJAX недоступен');
@@ -90,7 +92,6 @@
         });
     }
 
-    // Проверка Synology DSM
     function checkSynology(device, callback) {
         var url = getURL(device) +
             '/webapi/entry.cgi' +
@@ -126,7 +127,7 @@
                 callback({
                     ok: true,
                     message: 'DSM API доступен',
-                    details: 'File Station обнаружен'
+                    details: 'File Station обнаружен. Для чтения папок может потребоваться авторизация.'
                 });
             } else {
                 callback({
@@ -138,7 +139,6 @@
         });
     }
 
-    // Проверка QNAP
     function checkQNAP(device, callback) {
         var url = getURL(device) +
             '/cgi-bin/filemanager/utilRequest.cgi' +
@@ -162,32 +162,23 @@
                 data = JSON.parse(response);
             } catch (e) {
                 callback({
-                    ok: true,
-                    message: 'QNAP отвечает по HTTP',
-                    details: 'Получен нестандартный ответ'
+                    ok: false,
+                    message: 'QNAP вернул неизвестный ответ',
+                    details: String(response).substring(0, 250)
                 });
                 return;
             }
 
-            if (data.success === true) {
-                if (String(data.status) === '0') {
-                    callback({
-                        ok: true,
-                        message: 'QNAP File Station доступен',
-                        details: 'Ответ получен'
-                    });
-                } else {
-                    callback({
-                        ok: true,
-                        message: 'QNAP отвечает',
-                        details: 'Код ' + data.status +
-                            '. Возможно, требуется авторизация.'
-                    });
-                }
+            if (data.success === true && String(data.status) === '0') {
+                callback({
+                    ok: true,
+                    message: 'QNAP File Station доступен',
+                    details: 'Ответ получен'
+                });
             } else {
                 callback({
                     ok: false,
-                    message: 'Ошибка QNAP API',
+                    message: 'QNAP ответил, но список папок не получен',
                     details: JSON.stringify(data)
                 });
             }
@@ -207,7 +198,10 @@
         }
     }
 
-    // Стили интерфейса
+    // --------------------------------------------------
+    // Интерфейс
+    // --------------------------------------------------
+
     function addStyles() {
         if ($('#lan-media-styles').length) return;
 
@@ -228,7 +222,7 @@
             '}' +
 
             '.lan-media-subtitle{' +
-                'opacity:.55;' +
+                'opacity:.65;' +
                 'margin-bottom:2em;' +
             '}' +
 
@@ -281,14 +275,8 @@
                 'font-size:1em;' +
             '}' +
 
-            '.lan-media-status{' +
-                'margin-top:.8em;' +
-                'font-size:.9em;' +
-                'overflow-wrap:anywhere;' +
-                'opacity:.8;' +
-            '}' +
-
             '.lan-media-button{' +
+                'display:block;' +
                 'width:100%;' +
                 'padding:1em;' +
                 'border:0;' +
@@ -297,11 +285,21 @@
                 'color:inherit;' +
                 'font-size:1em;' +
                 'margin-top:.7em;' +
+                'text-align:center;' +
+                'box-sizing:border-box;' +
             '}' +
 
             '.lan-media-button.focus,' +
             '.lan-media-button:focus{' +
-                'background:rgba(128,128,128,.4);' +
+                'background:rgba(128,128,128,.45);' +
+                'outline:2px solid rgba(255,255,255,.6);' +
+            '}' +
+
+            '.lan-media-status{' +
+                'margin-top:.8em;' +
+                'font-size:.9em;' +
+                'overflow-wrap:anywhere;' +
+                'opacity:.8;' +
             '}' +
 
             '.lan-media-footer{' +
@@ -315,7 +313,6 @@
         );
     }
 
-    // Создание карточки NAS
     function deviceHTML(device) {
         return '' +
             '<div class="lan-media-device" data-id="' +
@@ -333,23 +330,24 @@
 
                     '<div class="lan-media-field">' +
                         '<label>IP-адрес</label>' +
-                        '<input class="lan-media-ip" value="' +
-                            device.ip + '" />' +
+                        '<input class="lan-media-ip" ' +
+                            'value="' + device.ip + '" />' +
                     '</div>' +
 
                     '<div class="lan-media-field">' +
                         '<label>Порт</label>' +
-                        '<input class="lan-media-port" value="' +
-                            device.port + '" />' +
+                        '<input class="lan-media-port" ' +
+                            'value="' + device.port + '" />' +
                     '</div>' +
 
                 '</div>' +
 
-                '<button class="lan-media-button selector"' +
-                    ' data-action="test" data-id="' +
+                '<div class="lan-media-button selector" ' +
+                    'tabindex="0" role="button" ' +
+                    'data-action="test" data-id="' +
                     device.id + '">' +
                     'Проверить подключение' +
-                '</button>' +
+                '</div>' +
 
                 '<div class="lan-media-status" data-status="' +
                     device.id + '">' +
@@ -359,7 +357,10 @@
             '</div>';
     }
 
+    // --------------------------------------------------
     // Экран LAN Media
+    // --------------------------------------------------
+
     function LanMedia() {
         var html;
 
@@ -388,15 +389,17 @@
                         content +
                     '</div>' +
 
-                    '<button class="lan-media-button selector"' +
-                        ' data-action="scan">' +
+                    '<div class="lan-media-button selector" ' +
+                        'tabindex="0" role="button" ' +
+                        'data-action="scan">' +
                         '🔎 Проверить все NAS' +
-                    '</button>' +
+                    '</div>' +
 
-                    '<button class="lan-media-button selector"' +
-                        ' data-action="save">' +
+                    '<div class="lan-media-button selector" ' +
+                        'tabindex="0" role="button" ' +
+                        'data-action="save">' +
                         'Сохранить настройки' +
-                    '</button>' +
+                    '</div>' +
 
                     '<div class="lan-media-footer">' +
                         'LAN Media · Synology / QNAP' +
@@ -411,13 +414,15 @@
         };
 
         this.start = function () {};
-
         this.render = function () {
             return html;
         };
 
         this.destroy = function () {
-            if (html) html.remove();
+            if (html) {
+                html.off();
+                html.remove();
+            }
         };
 
         function updateStatus(id, message) {
@@ -445,7 +450,6 @@
             saveFields();
 
             var device = getDevice(id);
-
             if (!device) return;
 
             updateStatus(id, 'Проверяем подключение...');
@@ -462,7 +466,6 @@
                 updateStatus(id, message);
 
                 console.log('[LAN Media]', device.name, result);
-
                 notify(device.name + ': ' + result.message);
             });
         }
@@ -475,86 +478,113 @@
             });
         }
 
+        function handleAction(element) {
+            var action = $(element).attr('data-action');
+            var id = $(element).attr('data-id');
+
+            if (action === 'test') {
+                runTest(id);
+            } else if (action === 'scan') {
+                scanAll();
+            } else if (action === 'save') {
+                saveFields();
+                notify('Настройки LAN Media сохранены');
+            }
+        }
+
         function bindEvents() {
-            html.on('hover:enter click', '[data-action]', function (event) {
-                var action = $(this).attr('data-action');
-                var id = $(this).attr('data-id');
-
-                if (action === 'test') {
-                    runTest(id);
+            // Событие Lampa для ТВ-пульта
+            html.on(
+                'hover:enter',
+                '.lan-media-button[data-action]',
+                function () {
+                    handleAction(this);
                 }
+            );
 
-                if (action === 'scan') {
-                    scanAll();
+            // Мышь и сенсорный экран
+            html.on(
+                'click',
+                '.lan-media-button[data-action]',
+                function () {
+                    handleAction(this);
                 }
-
-                if (action === 'save') {
-                    saveFields();
-                    notify('Настройки LAN Media сохранены');
-                }
-            });
+            );
         }
     }
 
-    // Добавление кнопки в штатное меню Lampa
+    // --------------------------------------------------
+    // Кнопка в главном меню Lampa
+    // --------------------------------------------------
+
+    function openLanMedia() {
+        Lampa.Activity.push({
+            title: 'LAN Media',
+            component: 'lan_media',
+            page: 1
+        });
+    }
+
     function addMenuButton() {
         if (!window.Lampa || !Lampa.Menu) return;
 
-        if (window.lan_media_menu_added) return;
+        var menuList = $('.menu .menu__list').eq(0);
 
-        if (typeof Lampa.Menu.addButton === 'function') {
-            Lampa.Menu.addButton(
-                '🗄️',
-                'LAN MEDIA',
-                function () {
-                    Lampa.Activity.push({
-                        title: 'LAN Media',
-                        component: 'lan_media',
-                        page: 1
-                    });
-                }
-            );
-
-            window.lan_media_menu_added = true;
-
-            console.log('[LAN Media] Menu button added');
-        } else {
-            var button = $(
-                '<li class="menu__item selector lan-media-menu">' +
-                    '<div class="menu__ico">🗄️</div>' +
-                    '<div class="menu__text">LAN MEDIA</div>' +
-                '</li>'
-            );
-
-            button.on('hover:enter', function () {
-                Lampa.Activity.push({
-                    title: 'LAN Media',
-                    component: 'lan_media',
-                    page: 1
-                });
-            });
-
-            $('.menu .menu__list').eq(0).prepend(button);
-
-            window.lan_media_menu_added = true;
-
-            console.log('[LAN Media] Menu button added via fallback');
+        if (!menuList.length) {
+            return;
         }
+
+        // Не создаём повторную кнопку
+        if (menuList.find('.' + MENU_CLASS).length) {
+            return;
+        }
+
+        var button = $(
+            '<li class="menu__item selector ' + MENU_CLASS + '" ' +
+                'tabindex="0" role="button">' +
+
+                '<div class="menu__ico">🗄️</div>' +
+                '<div class="menu__text">LAN MEDIA</div>' +
+
+            '</li>'
+        );
+
+        // Основное событие для ТВ-пульта
+        button.on('hover:enter', function () {
+            openLanMedia();
+        });
+
+        // Дополнительная поддержка мыши
+        button.on('click', function () {
+            openLanMedia();
+        });
+
+        // Добавляем непосредственно в штатный список меню
+        menuList.prepend(button);
+
+        console.log('[LAN Media] Menu button added with selector');
     }
 
+    // --------------------------------------------------
+    // Запуск плагина
+    // --------------------------------------------------
+
     function init() {
-        if (!window.Lampa) return;
+        if (!window.Lampa) {
+            console.log('[LAN Media] Waiting for Lampa...');
+            return;
+        }
 
         loadDevices();
 
         Lampa.Component.add('lan_media', LanMedia);
 
         if (window.appready) {
-            setTimeout(addMenuButton, 1500);
+            setTimeout(addMenuButton, 1000);
         } else {
             Lampa.Listener.follow('app', function (event) {
                 if (event.type === 'ready') {
-                    setTimeout(addMenuButton, 1500);
+                    setTimeout(addMenuButton, 1000);
                 }
             });
         }
