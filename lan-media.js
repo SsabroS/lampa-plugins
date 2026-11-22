@@ -1,112 +1,98 @@
 
-/*
- * LAN Media for Lampa
- * Version: 0.1.0
- * NAS: Synology DSM / QNAP QTS
- *
- * First stage:
- * - NAS connection diagnostics
- * - Synology API discovery
- * - QNAP File Station response
- * - Local IP/port settings
- *
- * No Windows server required.
- */
-
 (function () {
     'use strict';
 
-    if (window.lan_media_loaded) return;
-    window.lan_media_loaded = true;
+    if (window.lan_media_initialized) return;
+    window.lan_media_initialized = true;
 
-    var VERSION = '0.1.0';
-    var PREFIX = 'lan_media_';
+    var VERSION = '0.2.0';
+    var STORAGE_KEY = 'lan_media_devices';
 
-    var DEFAULT_NAS = [
+    var DEFAULT_DEVICES = [
         {
             id: 'synology',
             name: 'Synology DS118',
+            type: 'synology',
             ip: '192.168.1.118',
-            port: '5000',
-            type: 'synology'
+            port: '5000'
         },
         {
             id: 'qnap',
             name: 'QNAP TS-462',
+            type: 'qnap',
             ip: '192.168.1.62',
-            port: '8080',
-            type: 'qnap'
+            port: '8080'
         }
     ];
 
-    var NAS = [];
-    var html;
-    var scanning = false;
+    var devices = [];
 
-    function storageGet(key, fallback) {
+    function loadDevices() {
         try {
-            var value = Lampa.Storage.get(PREFIX + key, fallback);
-            return value === undefined || value === null ? fallback : value;
+            var saved = Lampa.Storage.get(STORAGE_KEY);
+
+            devices = saved && Array.isArray(saved)
+                ? saved
+                : DEFAULT_DEVICES.slice();
+
         } catch (e) {
-            return fallback;
+            devices = DEFAULT_DEVICES.slice();
         }
     }
 
-    function storageSet(key, value) {
+    function saveDevices() {
         try {
-            Lampa.Storage.set(PREFIX + key, value);
+            Lampa.Storage.set(STORAGE_KEY, devices);
         } catch (e) {
             console.log('[LAN Media] Storage error:', e);
         }
     }
 
-    function loadNAS() {
-        var saved = storageGet('devices', null);
-
-        if (saved && Array.isArray(saved)) {
-            NAS = saved;
-        } else {
-            NAS = DEFAULT_NAS.slice();
-            saveNAS();
-        }
-    }
-
-    function saveNAS() {
-        storageSet('devices', NAS);
-    }
-
-    function baseURL(device) {
-        return 'http://' + device.ip + ':' + device.port;
+    function getDevice(id) {
+        return devices.find(function (device) {
+            return device.id === id;
+        });
     }
 
     function notify(message) {
-        try {
-            Lampa.Noty.show(message, { time: 4000 });
-        } catch (e) {
-            console.log('[LAN Media]', message);
-        }
+        Lampa.Noty.show(message, { time: 3500 });
     }
 
+    function getURL(device) {
+        return 'http://' + device.ip + ':' + device.port;
+    }
+
+    // HTTP-запрос к NAS
     function request(url, callback) {
-        var net = new Lampa.Reguest();
+        if (!$ || !$.ajax) {
+            callback('jQuery AJAX недоступен');
+            return;
+        }
 
-        net.timeout(8000);
+        $.ajax({
+            url: url,
+            method: 'GET',
+            dataType: 'text',
+            timeout: 10000,
+            cache: false,
 
-        net.silent(
-            url,
-            function (data) {
-                callback(null, data);
+            success: function (response) {
+                callback(null, response);
             },
-            function (error) {
-                callback(error || new Error('Connection error'), null);
-            },
-            false,
-            { dataType: 'text' }
-        );
+
+            error: function (xhr, status, error) {
+                callback(
+                    error ||
+                    status ||
+                    'Ошибка HTTP: ' + xhr.status
+                );
+            }
+        });
     }
 
-    function testSynology(device, callback) {
-        var url = baseURL(device) +
+    // Проверка Synology DSM
+    function checkSynology(device, callback) {
+        var url = getURL(device) +
             '/webapi/entry.cgi' +
             '?api=SYNO.API.Info' +
             '&version=1' +
@@ -115,43 +101,46 @@
 
         request(url, function (error, response) {
             if (error) {
-                return callback({
+                callback({
                     ok: false,
-                    message: 'Нет ответа от DSM API'
+                    message: 'Не удалось обратиться к DSM API',
+                    details: String(error)
                 });
+                return;
             }
 
             var data;
 
             try {
-                data = typeof response === 'string'
-                    ? JSON.parse(response)
-                    : response;
+                data = JSON.parse(response);
             } catch (e) {
-                return callback({
+                callback({
                     ok: false,
-                    message: 'Некорректный ответ DSM'
+                    message: 'Некорректный ответ Synology',
+                    details: String(response).substring(0, 250)
                 });
+                return;
             }
 
-            if (data && data.success === true) {
-                return callback({
+            if (data.success === true) {
+                callback({
                     ok: true,
                     message: 'DSM API доступен',
-                    details: 'File Station API обнаружен'
+                    details: 'File Station обнаружен'
+                });
+            } else {
+                callback({
+                    ok: false,
+                    message: 'Synology вернул ошибку',
+                    details: JSON.stringify(data)
                 });
             }
-
-            callback({
-                ok: false,
-                message: 'DSM API вернул ошибку',
-                details: JSON.stringify(data)
-            });
         });
     }
 
-    function testQNAP(device, callback) {
-        var url = baseURL(device) +
+    // Проверка QNAP
+    function checkQNAP(device, callback) {
+        var url = getURL(device) +
             '/cgi-bin/filemanager/utilRequest.cgi' +
             '?func=get_tree' +
             '&is_iso=0' +
@@ -159,147 +148,66 @@
 
         request(url, function (error, response) {
             if (error) {
-                return callback({
+                callback({
                     ok: false,
-                    message: 'Нет ответа от QNAP File Station'
+                    message: 'Не удалось обратиться к QNAP',
+                    details: String(error)
                 });
+                return;
             }
 
             var data;
 
             try {
-                data = typeof response === 'string'
-                    ? JSON.parse(response)
-                    : response;
+                data = JSON.parse(response);
             } catch (e) {
-                return callback({
+                callback({
                     ok: true,
-                    message: 'HTTP отвечает',
-                    details: 'Получен нестандартный ответ File Station'
+                    message: 'QNAP отвечает по HTTP',
+                    details: 'Получен нестандартный ответ'
                 });
+                return;
             }
 
-            if (data && data.success === true) {
+            if (data.success === true) {
                 if (String(data.status) === '0') {
-                    return callback({
+                    callback({
                         ok: true,
                         message: 'QNAP File Station доступен',
                         details: 'Ответ получен'
                     });
+                } else {
+                    callback({
+                        ok: true,
+                        message: 'QNAP отвечает',
+                        details: 'Код ' + data.status +
+                            '. Возможно, требуется авторизация.'
+                    });
                 }
-
-                return callback({
-                    ok: true,
-                    message: 'QNAP отвечает',
-                    details: 'Код File Station: ' + data.status +
-                        '. Возможно, нужна авторизация.'
+            } else {
+                callback({
+                    ok: false,
+                    message: 'Ошибка QNAP API',
+                    details: JSON.stringify(data)
                 });
             }
-
-            callback({
-                ok: false,
-                message: 'Ошибка QNAP API',
-                details: JSON.stringify(data)
-            });
         });
     }
 
-    function testDevice(device, callback) {
+    function checkDevice(device, callback) {
         if (device.type === 'synology') {
-            testSynology(device, callback);
+            checkSynology(device, callback);
         } else if (device.type === 'qnap') {
-            testQNAP(device, callback);
+            checkQNAP(device, callback);
         } else {
             callback({
                 ok: false,
-                message: 'Неизвестный тип NAS'
+                message: 'Неизвестный тип устройства'
             });
         }
     }
 
-    function render() {
-        var devicesHTML = '';
-
-        NAS.forEach(function (device) {
-            devicesHTML +=
-                '<div class="lan-media-device" data-id="' +
-                device.id + '">' +
-
-                    '<div class="lan-media-device__header">' +
-                        '<div>' +
-                            '<div class="lan-media-device__name">' +
-                                device.name +
-                            '</div>' +
-                            '<div class="lan-media-device__type">' +
-                                device.type.toUpperCase() +
-                            '</div>' +
-                        '</div>' +
-                        '<div class="lan-media-status" data-status="' +
-                            device.id + '">' +
-                            'Не проверен' +
-                        '</div>' +
-                    '</div>' +
-
-                    '<div class="lan-media-fields">' +
-                        '<div class="lan-media-field">' +
-                            '<span>IP-адрес</span>' +
-                            '<input class="lan-media-ip" value="' +
-                                device.ip + '" />' +
-                        '</div>' +
-
-                        '<div class="lan-media-field">' +
-                            '<span>Порт</span>' +
-                            '<input class="lan-media-port" value="' +
-                                device.port + '" />' +
-                        '</div>' +
-                    '</div>' +
-
-                    '<div class="lan-media-result" data-result="' +
-                        device.id + '">' +
-                    '</div>' +
-
-                    '<button class="lan-media-test selector" data-test="' +
-                        device.id + '">' +
-                        'Проверить подключение' +
-                    '</button>' +
-
-                '</div>';
-        });
-
-        html = $(
-            '<div class="lan-media-page">' +
-
-                '<div class="lan-media-heading">' +
-                    '<div class="lan-media-title">LAN Media</div>' +
-                    '<div class="lan-media-version">Версия ' +
-                        VERSION + '</div>' +
-                '</div>' +
-
-                '<div class="lan-media-description">' +
-                    'Домашняя медиатека Synology и QNAP' +
-                '</div>' +
-
-                '<div class="lan-media-devices">' +
-                    devicesHTML +
-                '</div>' +
-
-                '<button class="lan-media-save selector">' +
-                    'Сохранить настройки' +
-                '</button>' +
-
-                '<div class="lan-media-footer">' +
-                    'LAN Media · SMB / HTTP API' +
-                '</div>' +
-
-            '</div>'
-        );
-
-        addStyles();
-        bindEvents();
-
-        return html;
-    }
-
+    // Стили интерфейса
     function addStyles() {
         if ($('#lan-media-styles').length) return;
 
@@ -308,63 +216,39 @@
 
             '.lan-media-page{' +
                 'padding:2em;' +
-                'width:100%;' +
                 'box-sizing:border-box;' +
+                'width:100%;' +
                 'color:inherit;' +
-            '}' +
-
-            '.lan-media-heading{' +
-                'display:flex;' +
-                'align-items:center;' +
-                'justify-content:space-between;' +
-                'flex-wrap:wrap;' +
-                'margin-bottom:0.5em;' +
             '}' +
 
             '.lan-media-title{' +
                 'font-size:2em;' +
                 'font-weight:600;' +
+                'margin-bottom:.3em;' +
             '}' +
 
-            '.lan-media-version{' +
+            '.lan-media-subtitle{' +
                 'opacity:.55;' +
-                'font-size:.9em;' +
-            '}' +
-
-            '.lan-media-description{' +
-                'opacity:.65;' +
                 'margin-bottom:2em;' +
             '}' +
 
             '.lan-media-device{' +
-                'padding:1.2em;' +
-                'margin-bottom:1.2em;' +
                 'border:1px solid rgba(128,128,128,.3);' +
                 'border-radius:12px;' +
+                'padding:1.2em;' +
+                'margin-bottom:1.2em;' +
             '}' +
 
-            '.lan-media-device__header{' +
-                'display:flex;' +
-                'justify-content:space-between;' +
-                'align-items:center;' +
-                'gap:1em;' +
-                'margin-bottom:1em;' +
-            '}' +
-
-            '.lan-media-device__name{' +
+            '.lan-media-device-title{' +
                 'font-size:1.25em;' +
                 'font-weight:600;' +
+                'margin-bottom:.3em;' +
             '}' +
 
-            '.lan-media-device__type{' +
-                'font-size:.75em;' +
+            '.lan-media-device-type{' +
+                'font-size:.8em;' +
                 'opacity:.5;' +
-                'margin-top:.3em;' +
-            '}' +
-
-            '.lan-media-status{' +
-                'font-size:.9em;' +
-                'opacity:.7;' +
+                'margin-bottom:1em;' +
             '}' +
 
             '.lan-media-fields{' +
@@ -375,16 +259,15 @@
             '}' +
 
             '.lan-media-field{' +
-                'display:flex;' +
-                'flex-direction:column;' +
-                'gap:.4em;' +
                 'flex:1;' +
-                'min-width:150px;' +
+                'min-width:130px;' +
             '}' +
 
-            '.lan-media-field span{' +
+            '.lan-media-field label{' +
+                'display:block;' +
                 'font-size:.8em;' +
-                'opacity:.65;' +
+                'opacity:.6;' +
+                'margin-bottom:.4em;' +
             '}' +
 
             '.lan-media-field input{' +
@@ -398,114 +281,136 @@
                 'font-size:1em;' +
             '}' +
 
-            '.lan-media-test,.lan-media-save{' +
-                'display:block;' +
-                'width:100%;' +
-                'padding:.9em;' +
+            '.lan-media-status{' +
                 'margin-top:.8em;' +
+                'font-size:.9em;' +
+                'overflow-wrap:anywhere;' +
+                'opacity:.8;' +
+            '}' +
+
+            '.lan-media-button{' +
+                'width:100%;' +
+                'padding:1em;' +
                 'border:0;' +
                 'border-radius:8px;' +
                 'background:rgba(128,128,128,.2);' +
                 'color:inherit;' +
                 'font-size:1em;' +
+                'margin-top:.7em;' +
             '}' +
 
-            '.lan-media-result{' +
-                'font-size:.85em;' +
-                'opacity:.75;' +
-                'margin-top:.7em;' +
-                'overflow-wrap:anywhere;' +
+            '.lan-media-button.focus,' +
+            '.lan-media-button:focus{' +
+                'background:rgba(128,128,128,.4);' +
             '}' +
 
             '.lan-media-footer{' +
+                'margin-top:2em;' +
                 'text-align:center;' +
                 'opacity:.4;' +
                 'font-size:.8em;' +
-                'margin-top:2em;' +
             '}' +
 
             '</style>'
         );
     }
 
-    function bindEvents() {
-        html.find('.lan-media-save').on('hover:enter click', function () {
-            saveFields();
-            notify('LAN Media: настройки сохранены');
-        });
+    // Создание карточки NAS
+    function deviceHTML(device) {
+        return '' +
+            '<div class="lan-media-device" data-id="' +
+                device.id + '">' +
 
-        html.find('.lan-media-test').on('hover:enter click', function () {
-            var id = $(this).attr('data-test');
-            var device = getDevice(id);
+                '<div class="lan-media-device-title">' +
+                    device.name +
+                '</div>' +
 
-            if (!device) return;
+                '<div class="lan-media-device-type">' +
+                    device.type.toUpperCase() +
+                '</div>' +
 
-            saveFields();
+                '<div class="lan-media-fields">' +
 
-            device = getDevice(id);
+                    '<div class="lan-media-field">' +
+                        '<label>IP-адрес</label>' +
+                        '<input class="lan-media-ip" value="' +
+                            device.ip + '" />' +
+                    '</div>' +
 
-            var status = html.find('[data-status="' + id + '"]');
-            var result = html.find('[data-result="' + id + '"]');
+                    '<div class="lan-media-field">' +
+                        '<label>Порт</label>' +
+                        '<input class="lan-media-port" value="' +
+                            device.port + '" />' +
+                    '</div>' +
 
-            status.text('Проверка...');
-            result.text('');
+                '</div>' +
 
-            testDevice(device, function (answer) {
-                status.text(answer.ok ? 'Доступен' : 'Ошибка');
+                '<button class="lan-media-button selector"' +
+                    ' data-action="test" data-id="' +
+                    device.id + '">' +
+                    'Проверить подключение' +
+                '</button>' +
 
-                result.text(
-                    answer.message +
-                    (answer.details ? ' — ' + answer.details : '')
-                );
+                '<div class="lan-media-status" data-status="' +
+                    device.id + '">' +
+                    'Ожидает проверки' +
+                '</div>' +
 
-                console.log('[LAN Media]', device.name, answer);
-
-                if (answer.ok) {
-                    notify(device.name + ': ' + answer.message);
-                } else {
-                    notify(device.name + ': ' + answer.message);
-                }
-            });
-        });
+            '</div>';
     }
 
-    function getDevice(id) {
-        for (var i = 0; i < NAS.length; i++) {
-            if (NAS[i].id === id) return NAS[i];
-        }
-
-        return null;
-    }
-
-    function saveFields() {
-        html.find('.lan-media-device').each(function () {
-            var id = $(this).attr('data-id');
-            var device = getDevice(id);
-
-            if (!device) return;
-
-            var ip = $(this).find('.lan-media-ip').val().trim();
-            var port = $(this).find('.lan-media-port').val().trim();
-
-            if (ip) device.ip = ip;
-            if (port) device.port = port;
-        });
-
-        saveNAS();
-    }
-
+    // Экран LAN Media
     function LanMedia() {
+        var html;
+
         this.create = function () {
-            return render();
+            addStyles();
+
+            var content = '';
+
+            devices.forEach(function (device) {
+                content += deviceHTML(device);
+            });
+
+            html = $(
+                '<div class="lan-media-page">' +
+
+                    '<div class="lan-media-title">' +
+                        '🗄 LAN Media' +
+                    '</div>' +
+
+                    '<div class="lan-media-subtitle">' +
+                        'Домашняя медиатека · Версия ' +
+                        VERSION +
+                    '</div>' +
+
+                    '<div class="lan-media-devices">' +
+                        content +
+                    '</div>' +
+
+                    '<button class="lan-media-button selector"' +
+                        ' data-action="scan">' +
+                        '🔎 Проверить все NAS' +
+                    '</button>' +
+
+                    '<button class="lan-media-button selector"' +
+                        ' data-action="save">' +
+                        'Сохранить настройки' +
+                    '</button>' +
+
+                    '<div class="lan-media-footer">' +
+                        'LAN Media · Synology / QNAP' +
+                    '</div>' +
+
+                '</div>'
+            );
+
+            bindEvents();
+
+            return html;
         };
 
         this.start = function () {};
-
-        this.stop = function () {};
-
-        this.pause = function () {};
-
-        this.resume = function () {};
 
         this.render = function () {
             return html;
@@ -514,64 +419,149 @@
         this.destroy = function () {
             if (html) html.remove();
         };
+
+        function updateStatus(id, message) {
+            html.find('[data-status="' + id + '"]').text(message);
+        }
+
+        function saveFields() {
+            html.find('.lan-media-device').each(function () {
+                var id = $(this).attr('data-id');
+                var device = getDevice(id);
+
+                if (!device) return;
+
+                var ip = $(this).find('.lan-media-ip').val().trim();
+                var port = $(this).find('.lan-media-port').val().trim();
+
+                if (ip) device.ip = ip;
+                if (port) device.port = port;
+            });
+
+            saveDevices();
+        }
+
+        function runTest(id) {
+            saveFields();
+
+            var device = getDevice(id);
+
+            if (!device) return;
+
+            updateStatus(id, 'Проверяем подключение...');
+
+            checkDevice(device, function (result) {
+                var message = result.ok
+                    ? '✓ ' + result.message
+                    : '✗ ' + result.message;
+
+                if (result.details) {
+                    message += ' — ' + result.details;
+                }
+
+                updateStatus(id, message);
+
+                console.log('[LAN Media]', device.name, result);
+
+                notify(device.name + ': ' + result.message);
+            });
+        }
+
+        function scanAll() {
+            saveFields();
+
+            devices.forEach(function (device) {
+                runTest(device.id);
+            });
+        }
+
+        function bindEvents() {
+            html.on('hover:enter click', '[data-action]', function (event) {
+                var action = $(this).attr('data-action');
+                var id = $(this).attr('data-id');
+
+                if (action === 'test') {
+                    runTest(id);
+                }
+
+                if (action === 'scan') {
+                    scanAll();
+                }
+
+                if (action === 'save') {
+                    saveFields();
+                    notify('Настройки LAN Media сохранены');
+                }
+            });
+        }
     }
 
+    // Добавление кнопки в штатное меню Lampa
     function addMenuButton() {
-        var menu = $('.menu .menu__list').eq(0);
+        if (!window.Lampa || !Lampa.Menu) return;
 
-        if (!menu.length) return;
+        if (window.lan_media_menu_added) return;
 
-        if (menu.find('.lan-media-menu').length) return;
+        if (typeof Lampa.Menu.addButton === 'function') {
+            Lampa.Menu.addButton(
+                '🗄️',
+                'LAN MEDIA',
+                function () {
+                    Lampa.Activity.push({
+                        title: 'LAN Media',
+                        component: 'lan_media',
+                        page: 1
+                    });
+                }
+            );
 
-        var button = $(
-            '<li class="menu__item selector lan-media-menu">' +
-                '<div class="menu__ico">' +
-                    '<svg viewBox="0 0 24 24" fill="currentColor">' +
-                        '<path d="M4 4h16v5H4zm0 7h16v9H4zm2 2v5h12v-5z"/>' +
-                    '</svg>' +
-                '</div>' +
-                '<div class="menu__text">LAN Media</div>' +
-            '</li>'
-        );
+            window.lan_media_menu_added = true;
 
-        button.on('hover:enter click', function () {
-            Lampa.Activity.push({
-                title: 'LAN Media',
-                component: 'lan_media',
-                page: 1
+            console.log('[LAN Media] Menu button added');
+        } else {
+            var button = $(
+                '<li class="menu__item selector lan-media-menu">' +
+                    '<div class="menu__ico">🗄️</div>' +
+                    '<div class="menu__text">LAN MEDIA</div>' +
+                '</li>'
+            );
+
+            button.on('hover:enter', function () {
+                Lampa.Activity.push({
+                    title: 'LAN Media',
+                    component: 'lan_media',
+                    page: 1
+                });
             });
-        });
 
-        menu.append(button);
+            $('.menu .menu__list').eq(0).prepend(button);
+
+            window.lan_media_menu_added = true;
+
+            console.log('[LAN Media] Menu button added via fallback');
+        }
     }
 
     function init() {
         if (!window.Lampa) return;
 
-        loadNAS();
+        loadDevices();
 
         Lampa.Component.add('lan_media', LanMedia);
 
-        addMenuButton();
+        if (window.appready) {
+            setTimeout(addMenuButton, 1500);
+        } else {
+            Lampa.Listener.follow('app', function (event) {
+                if (event.type === 'ready') {
+                    setTimeout(addMenuButton, 1500);
+                }
+            });
+        }
 
-        Lampa.Listener.follow('app', function (event) {
-            if (event.type === 'ready') {
-                addMenuButton();
-            }
-        });
-
-        console.log(
-            '[LAN Media] Loaded. Version:',
-            VERSION
-        );
+        console.log('[LAN Media] Initialized. Version:', VERSION);
     }
 
-    if (window.appready) {
-        init();
-    } else {
-        Lampa.Listener.follow('app', function (event) {
-            if (event.type === 'ready') init();
-        });
-    }
+    init();
 
 })();
