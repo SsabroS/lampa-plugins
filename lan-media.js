@@ -5,9 +5,8 @@
     if (window.lan_media_initialized) return;
     window.lan_media_initialized = true;
 
-    var VERSION = '0.3.0';
+    var VERSION = '0.4.1';
     var STORAGE_KEY = 'lan_media_devices';
-    var MENU_CLASS = 'lan-media-menu';
 
     var DEFAULT_DEVICES = [
         {
@@ -528,41 +527,27 @@
     function addMenuButton() {
         if (!window.Lampa || !Lampa.Menu) return;
 
-        var menuList = $('.menu .menu__list').eq(0);
+        if (window.lan_media_menu_added) return;
+        window.lan_media_menu_added = true;
 
-        if (!menuList.length) {
-            return;
+        if (typeof Lampa.Menu.addButton === 'function') {
+            // Тот же штатный метод, который проверен в test.js
+            Lampa.Menu.addButton('🗄️', 'LAN MEDIA', function () {
+                openLanMedia();
+            });
+
+            console.log('[LAN Media] Menu button added through Lampa.Menu.addButton');
+        } else {
+            // Резервный способ для сборок без Menu.addButton
+            var button = $('<li class="menu__item selector"><div class="menu__ico">🗄️</div><div class="menu__text">LAN MEDIA</div></li>');
+
+            button.on('hover:enter', function () {
+                openLanMedia();
+            });
+
+            $('.menu .menu__list').eq(0).prepend(button);
+            console.log('[LAN Media] Menu button added through jQuery fallback');
         }
-
-        // Не создаём повторную кнопку
-        if (menuList.find('.' + MENU_CLASS).length) {
-            return;
-        }
-
-        var button = $(
-            '<li class="menu__item selector ' + MENU_CLASS + '" ' +
-                'tabindex="0" role="button">' +
-
-                '<div class="menu__ico">🗄️</div>' +
-                '<div class="menu__text">LAN MEDIA</div>' +
-
-            '</li>'
-        );
-
-        // Основное событие для ТВ-пульта
-        button.on('hover:enter', function () {
-            openLanMedia();
-        });
-
-        // Дополнительная поддержка мыши
-        button.on('click', function () {
-            openLanMedia();
-        });
-
-        // Добавляем непосредственно в штатный список меню
-        menuList.prepend(button);
-
-        console.log('[LAN Media] Menu button added with selector');
     }
 
     // --------------------------------------------------
