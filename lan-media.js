@@ -74,9 +74,9 @@ function qnapLogin(cb){
  request({url:nas.host+'/cgi-bin/authLogin.cgi',method:'GET',dataType:'text',data:{user:c.user,pwd:encoded}},function(err,res){
   if(err){cb(err);return;}
   var xml=String(res);
-  var ok=(xml.match(/<authPassed[^>]*>([\\s\\S]*?)<\\/authPassed>/i)||[])[1];
-  var sid=(xml.match(/<authSid[^>]*>([\\s\\S]*?)<\\/authSid>/i)||[])[1];
-  sid=sid?sid.replace(/<!\\[CDATA\\[|\\]\\]>/g,'').trim():'';
+  var ok=(xml.match(/<authPassed[^>]*>([\s\S]*?)<\/authPassed>/i)||[])[1];
+  var sid=(xml.match(/<authSid[^>]*>([\s\S]*?)<\/authSid>/i)||[])[1];
+  sid=sid?sid.replace(/<!\[CDATA\[|\]\]>/g,'').trim():'';
   if(String(ok||'').trim()!=='1'||!sid){cb(new Error('QNAP не подтвердил вход: '+xml.slice(0,180)));return;}
   sessions.qnap=sid;cb(null);
  });
