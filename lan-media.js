@@ -1,8 +1,6 @@
 /* LAN Media Plugin for Lampa
-   Scans home servers (QNAP / Synology) via HTTP, parses filenames,
-   pulls TMDB info and saves progress.
-   
-   First version - configure HTTP folder URLs in settings.
+   Discovers Jellyfin servers on local network and provides media library access.
+   Progress is saved via Lampa Storage.
 */
 
 (function() {
@@ -11,47 +9,103 @@
     if (window.lan_media_ready) return;
     window.lan_media_ready = true;
 
-    const STORAGE_KEY = 'lan_media_config';
+    const STORAGE_KEY = 'lan_media_server';
     const PROGRESS_KEY = 'lan_media_progress';
 
-    function getConfig() {
-        return Lampa.Storage.get(STORAGE_KEY, {
-            sources: [
-                { name: 'QNAP', url: 'http://192.168.1.10/movies/' },
-                { name: 'Synology', url: 'http://192.168.1.20/movies/' }
-            ]
-        });
+    function getServer() {
+        return Lampa.Storage.get(STORAGE_KEY, '');
+    }
+
+    function setServer(url) {
+        Lampa.Storage.set(STORAGE_KEY, url);
     }
 
     function getProgress() {
         return Lampa.Storage.get(PROGRESS_KEY, {});
     }
 
-    function saveProgress(fileId, time) {
-        const prog = getProgress();
-        prog[fileId] = { time: time, updated: Date.now() };
-        Lampa.Storage.set(PROGRESS_KEY, prog);
+    function saveProgress(id, time) {
+        const p = getProgress();
+        p[id] = { time: time, updated: Date.now() };
+        Lampa.Storage.set(PROGRESS_KEY, p);
     }
 
-    function parseFilename(name) {
-        const clean = name.replace(/\.[a-z0-9]+$/i, '');
-        const yearMatch = clean.match(/[(\[ ]?(\d{4})[)\]]?/);
-        const year = yearMatch ? yearMatch[1] : '';
-        let title = clean
-            .replace(/[(\[ ]?\d{4}[)\]]?/g, '')
-            .replace(/[._]/g, ' ')
-            .replace(/\b(1080p|720p|2160p|4k|webrip|web-dl|bluray|bdrip|hdrip|x264|x265|hevc|aac|dts|ac3)\b/gi, '')
-            .trim();
-        return { title: title, year: year, original: name };
+    // Simple LAN scan for Jellyfin (port 8096)
+    function scanNetwork(callback) {
+        const found = [];
+        const ranges = ['192.168.0.', '192.168.1.', '10.0.0.', '10.0.1.'];
+        let checked = 0;
+        const total = ranges.length * 20; // scan first 20 IPs of each range for speed
+
+        Lampa.Noty.show('LAN Media: Сканирование сети...');
+
+        ranges.forEach(prefix => {
+            for (let i = 1; i <= 20; i++) {
+                const ip = prefix + i;
+                const url = 'http://' + ip + ':8096/System/Info/Public';
+                
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', url, true);
+                xhr.timeout = 800;
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        try {
+                            const info = JSON.parse(xhr.responseText);
+                            if (info.ServerName || info.Version) {
+                                found.push({
+                                    name: info.ServerName || 'Jellyfin',
+                                    url: 'http://' + ip + ':8096',
+                                    version: info.Version || ''
+                                });
+                            }
+                        } catch(e) {}
+                    }
+                    checked++;
+                    if (checked >= total) callback(found);
+                };
+                xhr.onerror = xhr.ontimeout = function() {
+                    checked++;
+                    if (checked >= total) callback(found);
+                };
+                xhr.send();
+            }
+        });
     }
 
-    function LanMediaComponent(object) {
+    function LanMediaComponent() {
         const scroll = new Lampa.Scroll({ mask: true, over: true });
+        const self = this;
 
         this.create = function() {
-            this.activity.loader(true);
-            Lampa.Noty.show('LAN Media: Настройте HTTP-адреса папок в настройках плагина');
-            this.activity.loader(false);
+            const server = getServer();
+            
+            const scanBtn = $('<div class="selector" style="padding:15px;background:#222;margin:10px;border-radius:8px;"><div>Найти серверы Jellyfin</div></div>');
+            scanBtn.on('hover:enter', () => {
+                scanNetwork(function(servers) {
+                    scroll.clear();
+                    if (servers.length === 0) {
+                        Lampa.Noty.show('Серверы не найдены. Введите адрес вручную.');
+                        return;
+                    }
+                    servers.forEach(s => {
+                        const item = $('<div class="selector" style="padding:12px;margin:8px;background:#1a1a1a;border-radius:6px;"><div>' + s.name + '</div><div style="font-size:0.8em;opacity:0.7;">' + s.url + '</div></div>');
+                        item.on('hover:enter', () => {
+                            setServer(s.url);
+                            Lampa.Noty.show('Выбран сервер: ' + s.name);
+                            Lampa.Activity.backward();
+                        });
+                        scroll.append(item);
+                    });
+                });
+            });
+
+            scroll.append(scanBtn);
+
+            if (server) {
+                const current = $('<div style="padding:15px;opacity:0.8;">Текущий сервер:<br>' + server + '</div>');
+                scroll.append(current);
+            }
+
             return this.render();
         };
 
@@ -66,13 +120,8 @@
             Lampa.Controller.toggle('content');
         };
 
-        this.render = function() {
-            return scroll.render();
-        };
-
-        this.destroy = function() {
-            scroll.destroy();
-        };
+        this.render = function() { return scroll.render(); };
+        this.destroy = function() { scroll.destroy(); };
     }
 
     function init() {
