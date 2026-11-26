@@ -1,5 +1,6 @@
 /* LAN Media Plugin for Lampa
    Discovers Jellyfin servers on local network.
+   Adds button to the left sidebar menu.
 */
 
 (function() {
@@ -86,7 +87,7 @@
 
             const server = getServer();
             if (server) {
-                scroll.append($('<div style="padding:15px;opacity:0.7;">Текущий: ' + server + '</div>'));
+                scroll.append($('<div style="padding:15px;opacity:0.7;">Текущий сервер: ' + server + '</div>'));
             }
 
             return this.render();
@@ -120,7 +121,6 @@
             });
         });
 
-        // Correct selector used by most working plugins
         const list = $('.menu .menu__list').eq(0);
         if (list.length) {
             list.append(btn);
@@ -132,42 +132,12 @@
     function init() {
         Lampa.Component.add('lan_media', LanMediaComponent);
 
-        // Settings entry (always visible)
-        Lampa.SettingsApi.addComponent({
-            component: 'lan_media',
-            name: 'Мои фильмы (LAN)',
-            icon: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'
-        });
-
-        Lampa.SettingsApi.addParam({
-            component: 'lan_media',
-            param: {
-                name: 'open_lan',
-                type: 'button',
-                values: '',
-                default: ''
-            },
-            field: {
-                name: 'Открыть сканирование',
-                description: 'Найти Jellyfin в локальной сети'
-            },
-            onChange: function() {
-                Lampa.Activity.push({
-                    url: '',
-                    title: 'Мои фильмы (LAN)',
-                    component: 'lan_media',
-                    page: 1
-                });
-            }
-        });
-
-        // Menu button
         if (window.appready) {
-            setTimeout(addMenuButton, 500);
+            setTimeout(addMenuButton, 300);
         } else {
             Lampa.Listener.follow('app', function(e) {
                 if (e.type === 'ready') {
-                    setTimeout(addMenuButton, 800);
+                    setTimeout(addMenuButton, 600);
                 }
             });
         }
