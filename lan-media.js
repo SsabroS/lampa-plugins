@@ -4,7 +4,7 @@
 if (!window.Lampa || window.lan_media_initialized) return;
 window.lan_media_initialized = true;
 
-var VERSION = '0.8.0-http-test';
+var VERSION = '0.9.0-debug';
 var NAS = {
   synology: { name: 'Synology DS118', type: 'synology', host: 'http://ssabros.crazedns.ru:5000' },
   qnap: { name: 'QNAP TS-462', type: 'qnap', host: 'http://ssabros.crazedns.ru:8080' }
@@ -12,25 +12,50 @@ var NAS = {
 var credentials = {};
 var sessions = {};
 var activeNas = null;
+var network = (window.Lampa && Lampa.Reguest) ? new Lampa.Reguest() : null;
 
 function note(message) {
-  Lampa.Noty.show(String(message), { time: 9000 });
+  Lampa.Noty.show(String(message), { time: 12000 });
 }
 function request(options, callback) {
-  if (!window.$ || !$.ajax) {
-    callback(new Error('Lampa AJAX/jQuery недоступен'));
+  var url = options.url;
+  if (options.data && typeof options.data === 'object') {
+    var qs = Object.keys(options.data).map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(String(options.data[k]));
+    }).join('&');
+    url += (url.indexOf('?') >= 0 ? '&' : '?') + qs;
+  }
+  var timeout = options.timeout || 18000;
+
+  if (network && typeof network.native === 'function') {
+    try { network.timeout(timeout); } catch (e) {}
+    network.native(url, function (raw) {
+      callback(null, raw);
+    }, function (err, code) {
+      var msg = (err && err.message) ? err.message : String(err || 'native error');
+      if (code) msg += ' (code ' + code + ')';
+      if (!code && /0|timeout|network|CORS|failed/i.test(msg)) msg += ' — возможна CORS или сеть (на Android используется native)';
+      callback(new Error(msg));
+    }, null, { dataType: 'text' });
     return;
   }
-  options.timeout = 18000;
-  options.cache = false;
-  options.success = function (data) { callback(null, data); };
-  options.error = function (xhr, status, error) {
-    var detail = error || status || 'Ошибка запроса';
-    if (xhr && xhr.status) detail += ' (HTTP ' + xhr.status + ')';
-    if (xhr && xhr.responseText) detail += ': ' + String(xhr.responseText).slice(0, 220);
-    callback(new Error(detail));
-  };
-  $.ajax(options);
+
+  if (window.$ && $.ajax) {
+    options.timeout = timeout;
+    options.cache = false;
+    options.dataType = options.dataType || 'text';
+    options.success = function (data) { callback(null, data); };
+    options.error = function (xhr, status, error) {
+      var detail = error || status || 'Ошибка запроса';
+      if (xhr && xhr.status === 0) detail = 'CORS или сеть недоступна (status 0). На веб-версии Lampa нужен прокси или Android-приложение.';
+      else if (xhr && xhr.status) detail += ' (HTTP ' + xhr.status + ')';
+      if (xhr && xhr.responseText) detail += ': ' + String(xhr.responseText).slice(0, 220);
+      callback(new Error(detail));
+    };
+    $.ajax(options);
+    return;
+  }
+  callback(new Error('Lampa.Reguest и jQuery недоступны'));
 }
 function parseJson(raw, callback) {
   if (raw && typeof raw === 'object') {
@@ -40,7 +65,7 @@ function parseJson(raw, callback) {
   try {
     callback(null, JSON.parse(String(raw)));
   } catch (e) {
-    callback(new Error('Ответ не JSON: ' + String(raw).slice(0, 220)));
+    callback(new Error('Ответ не JSON: ' + String(raw).slice(0, 280)));
   }
 }
 function askCredentials(nas) {
@@ -63,7 +88,6 @@ function synLogin(callback) {
   request({
     url: nas.host + '/webapi/auth.cgi',
     method: 'GET',
-    dataType: 'text',
     data: {
       api: 'SYNO.API.Auth',
       version: 7,
@@ -77,8 +101,9 @@ function synLogin(callback) {
     if (error) { callback(error); return; }
     parseJson(raw, function (parseError, data) {
       if (parseError) { callback(parseError); return; }
+      console.log('[LAN Media] Synology login response:', data);
       if (!data.success || !data.data || !data.data.sid) {
-        callback(new Error('DSM отклонил вход. API error code: ' + (data.error && data.error.code || 'не указан')));
+        callback(new Error('DSM отклонил вход. API error code: ' + (data.error && data.error.code || 'не указан') + ' | ответ: ' + JSON.stringify(data).slice(0, 200)));
         return;
       }
       sessions.synology = data.data.sid;
@@ -91,7 +116,6 @@ function synCall(params, callback) {
   request({
     url: NAS.synology.host + '/webapi/entry.cgi',
     method: 'GET',
-    dataType: 'text',
     data: params
   }, function (error, raw) {
     if (error) { callback(error); return; }
@@ -135,6 +159,7 @@ function qnapLogin(callback) {
   var auth = credentials.qnap;
   var encoded;
   try {
+    // ezEncode ≈ base64(password) UTF-8
     encoded = btoa(unescape(encodeURIComponent(auth.password)));
   } catch (e) {
     callback(new Error('Не удалось закодировать пароль для QNAP'));
@@ -143,16 +168,16 @@ function qnapLogin(callback) {
   request({
     url: nas.host + '/cgi-bin/authLogin.cgi',
     method: 'GET',
-    dataType: 'text',
-    data: { user: auth.user, pwd: encoded }
+    data: { user: auth.user, pwd: encoded, serviceKey: 1 }
   }, function (error, raw) {
     if (error) { callback(error); return; }
     var xml = String(raw);
+    console.log('[LAN Media] QNAP login raw:', xml.slice(0, 400));
     var passed = (xml.match(/<authPassed[^>]*>([\s\S]*?)<\/authPassed>/i) || [])[1];
     var sid = (xml.match(/<authSid[^>]*>([\s\S]*?)<\/authSid>/i) || [])[1];
     sid = sid ? sid.replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
     if (String(passed || '').trim() !== '1' || !sid) {
-      callback(new Error('QNAP login response не распознан: ' + xml.slice(0, 260)));
+      callback(new Error('QNAP login не удался. Ответ: ' + xml.slice(0, 320)));
       return;
     }
     sessions.qnap = sid;
@@ -163,7 +188,6 @@ function qnapTree(node, callback) {
   request({
     url: NAS.qnap.host + '/cgi-bin/filemanager/utilRequest.cgi',
     method: 'GET',
-    dataType: 'text',
     data: { func: 'get_tree', sid: sessions.qnap, is_iso: 0, node: node }
   }, function (error, raw) {
     if (error) { callback(error); return; }
@@ -191,7 +215,7 @@ function showEntries(title, entries, backAction) {
   if (backAction) items.push({ title: '← Назад', action: backAction });
   entries.forEach(function (entry) {
     items.push({
-      title: (entry.dir ? '📁 ' : '🎞️ ') + entry.name,
+      title: (entry.dir ? '📁 ' : '🎬 ') + entry.name,
       action: function () {
         if (entry.dir) openFolder(entry);
         else note('Файл найден: ' + entry.name + '. Запуск видео будет следующим этапом.');
@@ -254,7 +278,7 @@ function mainMenu() {
       }},
       { title: 'Проверить HTTP-доступ без входа', action: testHosts },
       { title: 'Информация', action: function () {
-        note('Экспериментальная версия. Пароль хранится только в памяти до перезапуска Lampa. HTTP не шифрует данные.');
+        note('Версия ' + VERSION + '. На Android используется native-запросы (CORS не мешает). Пароль только в памяти. HTTP не шифрует.');
       }}
     ],
     onSelect: function (item) { if (item && item.action) item.action(); },
@@ -265,8 +289,8 @@ function testHosts() {
   var pending = 2;
   var results = [];
   [NAS.synology, NAS.qnap].forEach(function (nas) {
-    request({ url: nas.host + '/', method: 'GET', dataType: 'text' }, function (error, raw) {
-      results.push(nas.name + ': ' + (error ? error.message : 'HTTP ответ получен'));
+    request({ url: nas.host + '/', method: 'GET' }, function (error, raw) {
+      results.push(nas.name + ': ' + (error ? error.message : 'HTTP ответ получен (' + String(raw).slice(0, 40) + '…)'));
       pending--;
       if (!pending) note(results.join(' | '));
     });
