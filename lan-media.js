@@ -1,6 +1,5 @@
 /* LAN Media Plugin for Lampa
-   Discovers Jellyfin servers on local network.
-   Adds button to the left sidebar menu.
+   Checks user-provided external HTTP servers.
 */
 
 (function() {
@@ -11,6 +10,12 @@
 
     const STORAGE_KEY = 'lan_media_server';
 
+    // User servers
+    const SERVERS = [
+        { name: 'Server :8080', url: 'http://ssabros.crazedns.ru:8080' },
+        { name: 'Server :5000', url: 'http://ssabros.crazedns.ru:5000' }
+    ];
+
     function getServer() {
         return Lampa.Storage.get(STORAGE_KEY, '');
     }
@@ -19,43 +24,28 @@
         Lampa.Storage.set(STORAGE_KEY, url);
     }
 
-    function scanNetwork(callback) {
+    function checkServers(callback) {
         const found = [];
-        const ranges = ['192.168.0.', '192.168.1.', '10.0.0.'];
         let checked = 0;
-        const total = ranges.length * 15;
 
-        Lampa.Noty.show('Сканирование сети...');
+        Lampa.Noty.show('Проверка серверов...');
 
-        ranges.forEach(prefix => {
-            for (let i = 1; i <= 15; i++) {
-                const ip = prefix + i;
-                const url = 'http://' + ip + ':8096/System/Info/Public';
-                
-                const xhr = new XMLHttpRequest();
-                xhr.open('GET', url, true);
-                xhr.timeout = 600;
-                xhr.onload = function() {
-                    if (xhr.status === 200) {
-                        try {
-                            const info = JSON.parse(xhr.responseText);
-                            if (info.ServerName || info.Version) {
-                                found.push({
-                                    name: info.ServerName || 'Jellyfin',
-                                    url: 'http://' + ip + ':8096'
-                                });
-                            }
-                        } catch(e) {}
-                    }
-                    checked++;
-                    if (checked >= total) callback(found);
-                };
-                xhr.onerror = xhr.ontimeout = function() {
-                    checked++;
-                    if (checked >= total) callback(found);
-                };
-                xhr.send();
-            }
+        SERVERS.forEach(server => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', server.url, true);
+            xhr.timeout = 4000;
+            xhr.onload = function() {
+                if (xhr.status >= 200 && xhr.status < 400) {
+                    found.push(server);
+                }
+                checked++;
+                if (checked >= SERVERS.length) callback(found);
+            };
+            xhr.onerror = xhr.ontimeout = function() {
+                checked++;
+                if (checked >= SERVERS.length) callback(found);
+            };
+            xhr.send();
         });
     }
 
@@ -63,12 +53,12 @@
         const scroll = new Lampa.Scroll({ mask: true, over: true });
 
         this.create = function() {
-            const scanBtn = $('<div class="selector" style="padding:15px;background:#222;margin:10px;border-radius:8px;"><div>Найти серверы Jellyfin</div></div>');
-            scanBtn.on('hover:enter', () => {
-                scanNetwork(function(servers) {
+            const checkBtn = $('<div class="selector" style="padding:15px;background:#222;margin:10px;border-radius:8px;"><div>Проверить серверы</div></div>');
+            checkBtn.on('hover:enter', () => {
+                checkServers(function(servers) {
                     scroll.clear();
                     if (!servers.length) {
-                        Lampa.Noty.show('Серверы не найдены');
+                        Lampa.Noty.show('Серверы не ответили');
                         return;
                     }
                     servers.forEach(s => {
@@ -83,7 +73,7 @@
                 });
             });
 
-            scroll.append(scanBtn);
+            scroll.append(checkBtn);
 
             const server = getServer();
             if (server) {
