@@ -4,7 +4,7 @@
 if (!window.Lampa || window.lan_media_initialized) return;
 window.lan_media_initialized = true;
 
-var VERSION = '0.9.0-debug';
+var VERSION = '0.9.1-debug';
 var NAS = {
   synology: { name: 'Synology DS118', type: 'synology', host: 'http://ssabros.crazedns.ru:5000' },
   qnap: { name: 'QNAP TS-462', type: 'qnap', host: 'http://ssabros.crazedns.ru:8080' }
@@ -15,7 +15,26 @@ var activeNas = null;
 var network = (window.Lampa && Lampa.Reguest) ? new Lampa.Reguest() : null;
 
 function note(message) {
-  Lampa.Noty.show(String(message), { time: 12000 });
+  Lampa.Noty.show(String(message), { time: 15000 });
+}
+function errorToString(err, code) {
+  if (!err) return 'unknown error';
+  if (typeof err === 'string') return err;
+  if (err.message && typeof err.message === 'string') return err.message;
+  // Lampa / jQuery style
+  var parts = [];
+  if (err.status !== undefined) parts.push('status ' + err.status);
+  if (err.statusText) parts.push(err.statusText);
+  if (err.responseText) parts.push(String(err.responseText).slice(0, 180));
+  if (err.responseJSON) parts.push(JSON.stringify(err.responseJSON).slice(0, 180));
+  if (code) parts.push('code ' + code);
+  if (err.exception) parts.push(String(err.exception));
+  try {
+    if (parts.length) return parts.join(' | ');
+    return JSON.stringify(err).slice(0, 300);
+  } catch (e) {
+    return String(err);
+  }
 }
 function request(options, callback) {
   var url = options.url;
@@ -32,9 +51,11 @@ function request(options, callback) {
     network.native(url, function (raw) {
       callback(null, raw);
     }, function (err, code) {
-      var msg = (err && err.message) ? err.message : String(err || 'native error');
-      if (code) msg += ' (code ' + code + ')';
-      if (!code && /0|timeout|network|CORS|failed/i.test(msg)) msg += ' — возможна CORS или сеть (на Android используется native)';
+      var msg = errorToString(err, code);
+      if (!code && /0|timeout|network|CORS|failed|status 0/i.test(msg)) {
+        msg += ' — возможна CORS или сеть (на Android используется native)';
+      }
+      console.error('[LAN Media] native error details:', err, code);
       callback(new Error(msg));
     }, null, { dataType: 'text' });
     return;
@@ -46,10 +67,8 @@ function request(options, callback) {
     options.dataType = options.dataType || 'text';
     options.success = function (data) { callback(null, data); };
     options.error = function (xhr, status, error) {
-      var detail = error || status || 'Ошибка запроса';
+      var detail = errorToString(xhr, status) || error || status || 'Ошибка запроса';
       if (xhr && xhr.status === 0) detail = 'CORS или сеть недоступна (status 0). На веб-версии Lampa нужен прокси или Android-приложение.';
-      else if (xhr && xhr.status) detail += ' (HTTP ' + xhr.status + ')';
-      if (xhr && xhr.responseText) detail += ': ' + String(xhr.responseText).slice(0, 220);
       callback(new Error(detail));
     };
     $.ajax(options);
@@ -78,8 +97,8 @@ function askCredentials(nas) {
   return true;
 }
 function showError(stage, error) {
-  var message = '[' + stage + '] ' + (error && error.message ? error.message : String(error));
-  console.error('[LAN Media ' + VERSION + '] ' + message);
+  var message = '[' + stage + '] ' + errorToString(error);
+  console.error('[LAN Media ' + VERSION + '] ' + message, error);
   note(message);
 }
 function synLogin(callback) {
@@ -159,7 +178,6 @@ function qnapLogin(callback) {
   var auth = credentials.qnap;
   var encoded;
   try {
-    // ezEncode ≈ base64(password) UTF-8
     encoded = btoa(unescape(encodeURIComponent(auth.password)));
   } catch (e) {
     callback(new Error('Не удалось закодировать пароль для QNAP'));
@@ -278,7 +296,7 @@ function mainMenu() {
       }},
       { title: 'Проверить HTTP-доступ без входа', action: testHosts },
       { title: 'Информация', action: function () {
-        note('Версия ' + VERSION + '. На Android используется native-запросы (CORS не мешает). Пароль только в памяти. HTTP не шифрует.');
+        note('Версия ' + VERSION + '. На Android используется native-запросы. Пароль только в памяти.');
       }}
     ],
     onSelect: function (item) { if (item && item.action) item.action(); },
@@ -290,7 +308,7 @@ function testHosts() {
   var results = [];
   [NAS.synology, NAS.qnap].forEach(function (nas) {
     request({ url: nas.host + '/', method: 'GET' }, function (error, raw) {
-      results.push(nas.name + ': ' + (error ? error.message : 'HTTP ответ получен (' + String(raw).slice(0, 40) + '…)'));
+      results.push(nas.name + ': ' + (error ? errorToString(error) : 'HTTP ответ получен'));
       pending--;
       if (!pending) note(results.join(' | '));
     });
