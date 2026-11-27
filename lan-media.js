@@ -148,9 +148,9 @@ function qnapLogin(callback) {
   }, function (error, raw) {
     if (error) { callback(error); return; }
     var xml = String(raw);
-    var passed = (xml.match(/<authPassed[^>]*>([\\s\\S]*?)<\\/authPassed>/i) || [])[1];
-    var sid = (xml.match(/<authSid[^>]*>([\\s\\S]*?)<\\/authSid>/i) || [])[1];
-    sid = sid ? sid.replace(/<!\\[CDATA\\[|\\]\\]>/g, '').trim() : '';
+    var passed = (xml.match(/<authPassed[^>]*>([\s\S]*?)<\/authPassed>/i) || [])[1];
+    var sid = (xml.match(/<authSid[^>]*>([\s\S]*?)<\/authSid>/i) || [])[1];
+    sid = sid ? sid.replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
     if (String(passed || '').trim() !== '1' || !sid) {
       callback(new Error('QNAP login response не распознан: ' + xml.slice(0, 260)));
       return;
