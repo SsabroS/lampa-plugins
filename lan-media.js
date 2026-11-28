@@ -6,9 +6,10 @@ window.__lan_media_qnap_0101_loaded = true;
 // Mark the legacy guard too, so an older URL cannot initialise beside this build.
 window.lan_media_initialized = true;
 
-var VERSION = '0.10.1-qnap-menu-fix';
+var VERSION = '0.10.2-qnap-two-addresses';
 var NAS = {
-  qnap: { name: 'QNAP TS-462', type: 'qnap', host: 'http://192.168.1.62:8080' }
+  qnap: { name: 'QNAP TS-462 — локальная сеть', type: 'qnap', host: 'http://192.168.1.62:8080' },
+  qnapExternal: { name: 'QNAP TS-462 — внешний адрес', type: 'qnap', host: 'http://ssabros.crazedns.ru:8080' }
 };
 var credentials = {};
 var sessions = {};
@@ -103,7 +104,7 @@ function showError(stage, error) {
   note(message);
 }
 function qnapLogin(callback) {
-  var nas = NAS.qnap;
+  var nas = activeNas || NAS.qnap;
   var auth = credentials.qnap;
   var encoded;
   try {
@@ -135,7 +136,7 @@ function qnapLogin(callback) {
 }
 function qnapTree(node, callback) {
   request({
-    url: NAS.qnap.host + '/cgi-bin/filemanager/utilRequest.cgi',
+    url: (activeNas || NAS.qnap).host + '/cgi-bin/filemanager/utilRequest.cgi',
     method: 'GET',
     data: { func: 'get_tree', sid: sessions.qnap, is_iso: 0, node: node }
   }, function (error, raw) {
@@ -183,11 +184,11 @@ function openFolder(entry) {
   if (!activeNas) return;
   qnapTree(entry.path, function (error, entries) {
     if (error) { showError('QNAP: чтение папки', error); return; }
-    showEntries(entry.name, entries, function () { connectQnap(); });
+    showEntries(entry.name, entries, function () { connectQnap(activeNas); });
   });
 }
-function connectQnap() {
-  activeNas = NAS.qnap;
+function connectQnap(nas) {
+  activeNas = nas || NAS.qnap;
   note('Подключение к QNAP…');
   qnapLogin(function (error) {
     if (error) { showError('QNAP авторизация', error); return; }
@@ -201,12 +202,15 @@ function mainMenu() {
   Lampa.Select.show({
     title: 'LAN Media ' + VERSION,
     items: [
-      { title: 'QNAP TS-462 — ' + NAS.qnap.host, action: function () {
-        if (askCredentials(NAS.qnap)) connectQnap();
+      { title: NAS.qnap.name + ' — ' + NAS.qnap.host, action: function () {
+        if (askCredentials(NAS.qnap)) connectQnap(NAS.qnap);
       }},
-      { title: 'Проверить HTTP-доступ к QNAP', action: testHosts },
+      { title: NAS.qnapExternal.name + ' — ' + NAS.qnapExternal.host, action: function () {
+        if (askCredentials(NAS.qnapExternal)) connectQnap(NAS.qnapExternal);
+      }},
+      { title: 'Проверить оба адреса QNAP', action: testHosts },
       { title: 'Информация', action: function () {
-        note('Версия ' + VERSION + '. Только QNAP TS-462. Адрес: ' + NAS.qnap.host + '. Пароль хранится только в памяти.');
+        note('Версия ' + VERSION + '. QNAP: локальный ' + NAS.qnap.host + '; внешний ' + NAS.qnapExternal.host + '. Один логин, пароль хранится только в памяти.');
       }}
     ],
     onSelect: function (item) { if (item && item.action) item.action(); },
@@ -214,8 +218,15 @@ function mainMenu() {
   });
 }
 function testHosts() {
-  request({ url: NAS.qnap.host + '/', method: 'GET' }, function (error) {
-    note('QNAP HTTP: ' + (error ? errorToString(error) : 'HTTP-ответ получен'));
+  var targets = [NAS.qnap, NAS.qnapExternal];
+  var pending = targets.length;
+  var results = [];
+  targets.forEach(function (nas) {
+    request({ url: nas.host + '/', method: 'GET', timeout: 10000 }, function (error) {
+      results.push(nas.name + ': ' + (error ? errorToString(error) : 'HTTP-ответ получен'));
+      pending--;
+      if (!pending) note(results.join(' | '));
+    });
   });
 }
 function addButton(attempt) {
