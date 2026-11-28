@@ -1,10 +1,12 @@
 (function () {
 'use strict';
 
-if (!window.Lampa || window.lan_media_initialized) return;
+if (!window.Lampa || window.__lan_media_qnap_0101_loaded) return;
+window.__lan_media_qnap_0101_loaded = true;
+// Mark the legacy guard too, so an older URL cannot initialise beside this build.
 window.lan_media_initialized = true;
 
-var VERSION = '0.10.0-qnap-only';
+var VERSION = '0.10.1-qnap-menu-fix';
 var NAS = {
   qnap: { name: 'QNAP TS-462', type: 'qnap', host: 'http://192.168.1.62:8080' }
 };
@@ -216,16 +218,30 @@ function testHosts() {
     note('QNAP HTTP: ' + (error ? errorToString(error) : 'HTTP-ответ получен'));
   });
 }
-function addButton() {
-  if (!Lampa.Menu || typeof Lampa.Menu.addButton !== 'function' || window.lan_media_menu_added) return;
-  window.lan_media_menu_added = true;
-  Lampa.Menu.addButton('🗄️', 'LAN MEDIA', mainMenu);
-  console.log('[LAN Media] ' + VERSION + ' initialized');
+function addButton(attempt) {
+  attempt = attempt || 0;
+  if (!Lampa.Menu || typeof Lampa.Menu.addButton !== 'function') {
+    if (attempt < 30) setTimeout(function () { addButton(attempt + 1); }, 500);
+    else console.error('[LAN Media ' + VERSION + '] Lampa.Menu.addButton is unavailable after 15 seconds');
+    return;
+  }
+  if (window.__lan_media_qnap_button_added) return;
+  try {
+    Lampa.Menu.addButton('🗄️', 'LAN MEDIA', mainMenu);
+    window.__lan_media_qnap_button_added = true;
+    window.lan_media_menu_added = true;
+    console.log('[LAN Media ' + VERSION + '] menu button added');
+  } catch (e) {
+    console.error('[LAN Media ' + VERSION + '] menu button error:', e);
+    if (attempt < 30) setTimeout(function () { addButton(attempt + 1); }, 500);
+  }
 }
-if (window.appready) setTimeout(addButton, 1500);
+if (window.appready) addButton(0);
 else if (Lampa.Listener && typeof Lampa.Listener.follow === 'function') {
   Lampa.Listener.follow('app', function (event) {
-    if (event.type === 'ready') setTimeout(addButton, 1500);
+    if (event && event.type === 'ready') addButton(0);
   });
-} else setTimeout(addButton, 2500);
+  // Also cover cases where the ready event has already fired before plugin injection.
+  setTimeout(function () { addButton(0); }, 2500);
+} else addButton(0);
 })();
