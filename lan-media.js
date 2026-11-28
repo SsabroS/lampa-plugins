@@ -4,10 +4,9 @@
 if (!window.Lampa || window.lan_media_initialized) return;
 window.lan_media_initialized = true;
 
-var VERSION = '0.9.1-debug';
+var VERSION = '0.10.0-qnap-only';
 var NAS = {
-  synology: { name: 'Synology DS118', type: 'synology', host: 'http://ssabros.crazedns.ru:5000' },
-  qnap: { name: 'QNAP TS-462', type: 'qnap', host: 'http://ssabros.crazedns.ru:8080' }
+  qnap: { name: 'QNAP TS-462', type: 'qnap', host: 'http://192.168.1.62:8080' }
 };
 var credentials = {};
 var sessions = {};
@@ -101,78 +100,6 @@ function showError(stage, error) {
   console.error('[LAN Media ' + VERSION + '] ' + message, error);
   note(message);
 }
-function synLogin(callback) {
-  var nas = NAS.synology;
-  var auth = credentials.synology;
-  request({
-    url: nas.host + '/webapi/auth.cgi',
-    method: 'GET',
-    data: {
-      api: 'SYNO.API.Auth',
-      version: 7,
-      method: 'login',
-      account: auth.user,
-      passwd: auth.password,
-      session: 'FileStation',
-      format: 'sid'
-    }
-  }, function (error, raw) {
-    if (error) { callback(error); return; }
-    parseJson(raw, function (parseError, data) {
-      if (parseError) { callback(parseError); return; }
-      console.log('[LAN Media] Synology login response:', data);
-      if (!data.success || !data.data || !data.data.sid) {
-        callback(new Error('DSM отклонил вход. API error code: ' + (data.error && data.error.code || 'не указан') + ' | ответ: ' + JSON.stringify(data).slice(0, 200)));
-        return;
-      }
-      sessions.synology = data.data.sid;
-      callback(null);
-    });
-  });
-}
-function synCall(params, callback) {
-  params._sid = sessions.synology;
-  request({
-    url: NAS.synology.host + '/webapi/entry.cgi',
-    method: 'GET',
-    data: params
-  }, function (error, raw) {
-    if (error) { callback(error); return; }
-    parseJson(raw, function (parseError, data) {
-      if (parseError) { callback(parseError); return; }
-      if (!data.success) {
-        callback(new Error('FileStation API error code: ' + (data.error && data.error.code || 'не указан')));
-        return;
-      }
-      callback(null, data.data || {});
-    });
-  });
-}
-function synShares(callback) {
-  synCall({ api: 'SYNO.FileStation.List', version: 2, method: 'list_share' }, function (error, data) {
-    if (error) { callback(error); return; }
-    callback(null, (data.shares || []).map(function (share) {
-      return { name: share.name, path: share.path, dir: true };
-    }));
-  });
-}
-function synFolder(path, callback) {
-  synCall({
-    api: 'SYNO.FileStation.List',
-    version: 2,
-    method: 'list',
-    folder_path: path,
-    offset: 0,
-    limit: 500,
-    sort_by: 'name',
-    sort_direction: 'asc'
-  }, function (error, data) {
-    if (error) { callback(error); return; }
-    callback(null, (data.files || []).map(function (file) {
-      return { name: file.name, path: file.path, dir: !!file.isdir };
-    }));
-  });
-}
 function qnapLogin(callback) {
   var nas = NAS.qnap;
   var auth = credentials.qnap;
@@ -250,27 +177,9 @@ function showEntries(title, entries, backAction) {
 }
 function openFolder(entry) {
   if (!activeNas) return;
-  if (activeNas.type === 'synology') {
-    synFolder(entry.path, function (error, entries) {
-      if (error) { showError('Synology: чтение папки', error); return; }
-      showEntries(entry.name, entries, function () { connectSynology(); });
-    });
-  } else {
-    qnapTree(entry.path, function (error, entries) {
-      if (error) { showError('QNAP: чтение папки', error); return; }
-      showEntries(entry.name, entries, function () { connectQnap(); });
-    });
-  }
-}
-function connectSynology() {
-  activeNas = NAS.synology;
-  note('Подключение к Synology…');
-  synLogin(function (error) {
-    if (error) { showError('Synology авторизация', error); return; }
-    synShares(function (shareError, shares) {
-      if (shareError) { showError('Synology список общих папок', shareError); return; }
-      showEntries('Synology — общие папки', shares, mainMenu);
-    });
+  qnapTree(entry.path, function (error, entries) {
+    if (error) { showError('QNAP: чтение папки', error); return; }
+    showEntries(entry.name, entries, function () { connectQnap(); });
   });
 }
 function connectQnap() {
@@ -288,15 +197,12 @@ function mainMenu() {
   Lampa.Select.show({
     title: 'LAN Media ' + VERSION,
     items: [
-      { title: 'Synology DS118 — ' + NAS.synology.host, action: function () {
-        if (askCredentials(NAS.synology)) connectSynology();
-      }},
       { title: 'QNAP TS-462 — ' + NAS.qnap.host, action: function () {
         if (askCredentials(NAS.qnap)) connectQnap();
       }},
-      { title: 'Проверить HTTP-доступ без входа', action: testHosts },
+      { title: 'Проверить HTTP-доступ к QNAP', action: testHosts },
       { title: 'Информация', action: function () {
-        note('Версия ' + VERSION + '. На Android используется native-запросы. Пароль только в памяти.');
+        note('Версия ' + VERSION + '. Только QNAP TS-462. Адрес: ' + NAS.qnap.host + '. Пароль хранится только в памяти.');
       }}
     ],
     onSelect: function (item) { if (item && item.action) item.action(); },
@@ -304,14 +210,8 @@ function mainMenu() {
   });
 }
 function testHosts() {
-  var pending = 2;
-  var results = [];
-  [NAS.synology, NAS.qnap].forEach(function (nas) {
-    request({ url: nas.host + '/', method: 'GET' }, function (error, raw) {
-      results.push(nas.name + ': ' + (error ? errorToString(error) : 'HTTP ответ получен'));
-      pending--;
-      if (!pending) note(results.join(' | '));
-    });
+  request({ url: NAS.qnap.host + '/', method: 'GET' }, function (error) {
+    note('QNAP HTTP: ' + (error ? errorToString(error) : 'HTTP-ответ получен'));
   });
 }
 function addButton() {
