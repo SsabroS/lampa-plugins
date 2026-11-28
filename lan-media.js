@@ -119,13 +119,13 @@ function qnapLogin(callback) {
   }, function (error, raw) {
     if (error) { callback(error); return; }
     var xml = String(raw);
-    var passed = (xml.match(/<authPassed[^>]*>([\\s\\S]*?)<\\/authPassed>/i) || [])[1];
-    var sid = (xml.match(/<authSid[^>]*>([\\s\\S]*?)<\\/authSid>/i) || [])[1];
-    sid = sid ? sid.replace(/<!\\[CDATA\\[|\\]\\]>/g, '').trim() : '';
+    var passed = (xml.match(/<authPassed[^>]*>([\s\S]*?)<\/authPassed>/i) || [])[1];
+    var sid = (xml.match(/<authSid[^>]*>([\s\S]*?)<\/authSid>/i) || [])[1];
+    sid = sid ? sid.replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
     // Never write the QNAP session token to logs.
     console.log('[LAN Media] QNAP auth response: authPassed=' + String(passed || 'missing').trim() + ', authSid=' + (sid ? 'present' : 'missing'));
     if (String(passed || '').trim() !== '1' || !sid) {
-      var safeXml = xml.replace(/(<authSid[^>]*>)[\\s\\S]*?(<\\/authSid>)/i, '$1[REDACTED]$2');
+      var safeXml = xml.replace(/(<authSid[^>]*>)[\s\S]*?(<\/authSid>)/i, '$1[REDACTED]$2');
       callback(new Error('QNAP login не удался. Ответ: ' + safeXml.slice(0, 320)));
       return;
     }
