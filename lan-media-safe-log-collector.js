@@ -31,7 +31,7 @@
  * discovery, adapted for log-server.py's single-port default (9999).
  *
  * Log prefix:   [LogCollector]
- * Global guard: window.__logCollectorLoaded
+ * Global guard: window.__lanMediaSafeLogCollectorLoaded
  * Storage ns:   lan_media_safe_log_collector_*
  */
 (function () {
@@ -86,9 +86,9 @@
     // Redact secrets before anything is buffered or written to disk.
     function redactSensitiveText(value) {
         var s = String(value == null ? '' : value);
-        s = s.replace(/([?&\\s])((?:pwd|plain_pwd|password|passwd|sid|authsid|qtoken|token))=([^&#\\s]*)/gi, '$1$2=[REDACTED]');
-        s = s.replace(/(<\\s*(?:authSid|qtoken)\\b[^>]*>)[\\s\\S]*?(<\\s*\\/\\s*(?:authSid|qtoken)\\s*>)/gi, '$1[REDACTED]$2');
-        s = s.replace(/("(?:password|passwd|pwd|sid|authSid|qtoken|token)"\\s*:\\s*")[^"]*(")/gi, '$1[REDACTED]$2');
+        s = s.replace(/([?&\s])((?:pwd|plain_pwd|password|passwd|sid|authsid|qtoken|token))=([^&#\s]*)/gi, '$1$2=[REDACTED]');
+        s = s.replace(/(<\s*(?:authSid|qtoken)\b[^>]*>)[\s\S]*?(<\s*\/\s*(?:authSid|qtoken)\s*>)/gi, '$1[REDACTED]$2');
+        s = s.replace(/("(?:password|passwd|pwd|sid|authSid|qtoken|token)"\s*:\s*")[^"]*(")/gi, '$1[REDACTED]$2');
         return s;
     }
 
@@ -103,7 +103,7 @@
                 try { out.push(redactSensitiveText(JSON.stringify(a))); }
                 catch (e) { out.push('[Object]'); }
             } else {
-                out.push(String(a));
+                out.push(redactSensitiveText(String(a)));
             }
         }
         return out.join(' ');
